@@ -1,6 +1,9 @@
 ---
-# Remote deploy: copy compose + .env, pull images, compose up.
-# Invoked by bash ./deploy/deploy.sh (not by build.sh — local image builds are Docker-only).
+# Remote deploy: replace whatever was running with the current compose + images.
+# Invoked by bash ./deploy/deploy.sh
+#
+# On the target: compose down → remove stack containers → (optional) drop cached
+# images for this tag → pull → up --force-recreate. Offline: skip pull/rmi.
 
 - name: Drone Bros Inc — deploy stats + HMI
   hosts: all
@@ -8,6 +11,8 @@
   vars:
     deploy_dir: "{{ dronebros_deploy_dir | default('/home/' ~ ansible_user ~ '/dronebros', true) }}"
     skip_image_pull: false
+    stack_reg: "{{ stack_image_registry | default('ghcr.io/spoon-development', true) }}"
+    stack_tag: "{{ stack_image_tag | default('latest', true) }}"
   tasks:
     - name: Ensure deploy directory
       ansible.builtin.file:
@@ -25,10 +30,35 @@
       ansible.builtin.copy:
         dest: "{{ deploy_dir }}/.env"
         content: |
-          IMAGE_REGISTRY={{ stack_image_registry | default('ghcr.io/spoon-development', true) }}
-          IMAGE_TAG={{ stack_image_tag | default('latest', true) }}
+          IMAGE_REGISTRY={{ stack_reg }}
+          IMAGE_TAG={{ stack_tag }}
           HMI_HOST_PORT={{ hmi_host_port | default(8080) }}
         mode: "0644"
+
+    - name: Tear down previous stack (containers, project network, anonymous volumes)
+      ansible.builtin.command: docker compose down --remove-orphans --volumes
+      args:
+        chdir: "{{ deploy_dir }}"
+      register: compose_down
+      failed_when: false
+      changed_when: compose_down.rc == 0
+
+    - name: Remove stack containers by name (cleanup if project name changed)
+      ansible.builtin.shell: docker rm -f dronebros-stats dronebros-hmi 2>/dev/null || true
+      args:
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false
+
+    - name: Remove cached images for this registry/tag (force fresh pull)
+      ansible.builtin.shell: |
+        docker rmi "{{ stack_reg }}/dronebros-stats:{{ stack_tag }}" 2>/dev/null || true
+        docker rmi "{{ stack_reg }}/dronebros-hmi:{{ stack_tag }}" 2>/dev/null || true
+      args:
+        executable: /bin/bash
+      when: not (skip_image_pull | bool)
+      changed_when: false
+      failed_when: false
 
     - name: Pull images from registry
       ansible.builtin.command: docker compose pull
@@ -39,8 +69,8 @@
       changed_when: false
       failed_when: compose_pull.rc != 0
 
-    - name: Start stack
-      ansible.builtin.command: docker compose up -d
+    - name: Start stack (always recreate containers from current images)
+      ansible.builtin.command: docker compose up -d --force-recreate --remove-orphans
       args:
         chdir: "{{ deploy_dir }}"
       register: compose_up

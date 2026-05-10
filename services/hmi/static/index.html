@@ -28,10 +28,16 @@
       margin: 0;
       font-family: var(--font);
       color: var(--text);
-      background:
-        radial-gradient(1200px 600px at 15% -10%, rgba(94, 184, 255, 0.18), transparent 55%),
-        radial-gradient(900px 500px at 100% 0%, rgba(157, 125, 255, 0.16), transparent 50%),
+      background-color: var(--bg0);
+      background-image:
+        url("images/flight-bg.svg"),
+        radial-gradient(1200px 600px at 15% -10%, rgba(94, 184, 255, 0.16), transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, rgba(157, 125, 255, 0.14), transparent 50%),
         linear-gradient(165deg, var(--bg0), var(--bg1) 45%, #0a0f18);
+      background-size: cover, auto, auto, auto;
+      background-position: center top, 0 0, 0 0, 0 0;
+      background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
+      background-attachment: fixed, scroll, scroll, scroll;
       min-height: 100vh;
     }
     .noise {
@@ -72,13 +78,17 @@
       color: var(--muted);
       font-weight: 600;
     }
-    .brand-badge span {
+    .brand-badge span.dot {
       display: inline-block;
       width: 7px;
       height: 7px;
       border-radius: 50%;
       background: linear-gradient(135deg, var(--accent), var(--accent2));
       box-shadow: 0 0 14px rgba(94, 184, 255, 0.65);
+      flex-shrink: 0;
+    }
+    .brand-badge .badge-host {
+      letter-spacing: 0.14em;
     }
     h1 {
       margin: 0;
@@ -385,9 +395,9 @@
   <div class="wrap">
     <header>
       <div class="brand">
-        <div class="brand-badge"><span></span> DIY drone stack</div>
+        <div class="brand-badge"><span class="dot" aria-hidden="true"></span> <span id="badge-host" class="badge-host">DIY drone stack</span></div>
         <h1 id="page-title">DIY drone stack</h1>
-        <p class="tagline">Live host telemetry — temperature, load, memory, uptime, storage, and a simple network helper.</p>
+        <p class="tagline">Live telemetry for this host — swap the SVG in <code>static/images/</code> anytime for your own art.</p>
       </div>
       <div class="status-bar" aria-live="polite">
         <span id="pill" class="pill wait">Connecting</span>
@@ -663,7 +673,9 @@
 
       const host = (data.hostname && String(data.hostname).trim()) || "";
       const titleEl = document.getElementById("page-title");
+      const badgeHost = document.getElementById("badge-host");
       if (titleEl) titleEl.textContent = host || "DIY drone stack";
+      if (badgeHost) badgeHost.textContent = (host || "DIY drone stack").toUpperCase();
       document.title = host ? `${host} · DIY stack` : "DIY drone stack";
 
       if (computeChip) {
