@@ -1,10 +1,11 @@
 # Drone Bros Inc — stats + HMI only. One published port (HMI); stats API is internal.
 #
-# Images: pre-built on GitHub Actions → GHCR (linux/arm64). On the Pi:
-#   docker compose pull && docker compose up -d
+# This file is what we copy to the Pi: image-only (GHCR), no ./services paths on the device.
+# Local builds use docker-compose.build.yml merged in — see deploy/build.sh.
 #
-# Offline: load a tar from your laptop (`scripts/export-images.sh`) then `docker compose up -d`
-#   with pull skipped — see deploy/ansible and README.
+# Vars: IMAGE_REGISTRY, IMAGE_TAG, HMI_HOST_PORT (defaults inline below; Ansible writes .env from deploy/config/stack.yml).
+#
+# Offline: docker load on the Pi, set skip_image_pull: true in deploy/config/stack.yml, then bash ./deploy/deploy.sh.
 
 name: dronebros
 

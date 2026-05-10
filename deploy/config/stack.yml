@@ -1,0 +1,10 @@
+# Stack images (applied on the target as IMAGE_REGISTRY / IMAGE_TAG in .env next to docker-compose.yml).
+# Image names themselves are fixed in docker-compose.yml (dronebros-stats, dronebros-hmi).
+stack_image_registry: ghcr.io/spoon-development
+stack_image_tag: latest
+
+# Set true when the Pi already has images loaded (e.g. docker load) and must not pull from a registry.
+skip_image_pull: false
+
+# Optional: published HMI port on the host (default 8080 if omitted).
+# hmi_host_port: 8080

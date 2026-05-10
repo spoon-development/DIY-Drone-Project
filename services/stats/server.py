@@ -116,8 +116,14 @@ def disk_root() -> dict[str, Any]:
 
 
 def hostname() -> str | None:
-    h = _read(f"{HOST_PROC}/sys/kernel/hostname")
-    return h.strip() if h else None
+    """Prefer the host filesystem: bind-mounted /proc often reflects the container UTS name."""
+    for path in (f"{HOST_ROOT}/etc/hostname", f"{HOST_PROC}/sys/kernel/hostname"):
+        h = _read(path)
+        if h:
+            line = h.splitlines()[0].strip()
+            if line:
+                return line
+    return None
 
 
 def _proc_route_paths() -> list[str]:

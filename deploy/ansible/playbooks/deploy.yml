@@ -1,20 +1,12 @@
 ---
-# Deploy Drone Bros stats + HMI stack to any host with Docker + Compose v2.
-#
-# From repo root (after: pip install ansible):
-#   ansible-playbook deploy/ansible/playbooks/deploy_stack.yml \
-#     -i '192.168.1.50,' \
-#     -e ansible_user=pi \
-#     -e skip_image_pull=false
-#
-# Offline (no registry on device): build/save images elsewhere, docker load on device,
-# then run with -e skip_image_pull=true
+# Remote deploy: copy compose + .env, pull images, compose up.
+# Invoked by bash ./deploy/deploy.sh (not by build.sh — local image builds are Docker-only).
 
 - name: Drone Bros Inc — deploy stats + HMI
   hosts: all
   gather_facts: false
   vars:
-    deploy_dir: /opt/dronebros
+    deploy_dir: "{{ dronebros_deploy_dir | default('/home/' ~ ansible_user ~ '/dronebros', true) }}"
     skip_image_pull: false
   tasks:
     - name: Ensure deploy directory
@@ -29,11 +21,13 @@
         dest: "{{ deploy_dir }}/docker-compose.yml"
         mode: "0644"
 
-    - name: Seed .env from example (once)
+    - name: Write .env from deploy/config/stack.yml
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../../../.env.example"
         dest: "{{ deploy_dir }}/.env"
-        force: false
+        content: |
+          IMAGE_REGISTRY={{ stack_image_registry | default('ghcr.io/spoon-development', true) }}
+          IMAGE_TAG={{ stack_image_tag | default('latest', true) }}
+          HMI_HOST_PORT={{ hmi_host_port | default(8080) }}
         mode: "0644"
 
     - name: Pull images from registry

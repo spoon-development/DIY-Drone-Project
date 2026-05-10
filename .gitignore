@@ -1,6 +1,5 @@
 .env
-# Local image bundles (large; do not commit)
-dronebros-bundle.tar
+deploy/.venv/
 *.log
 __pycache__/
 *.pyc

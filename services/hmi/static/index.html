@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>drone DIY Build</title>
+  <title>DIY drone stack</title>
   <style>
     :root {
       color-scheme: dark;
@@ -317,6 +317,67 @@
       border: none;
       border-top: 1px solid rgba(255, 255, 255, 0.06);
     }
+    .hero-roll {
+      position: relative;
+      height: 132px;
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin: 0 0 1.5rem;
+      border: 1px solid var(--card-border);
+      box-shadow: var(--shadow);
+      background: rgba(10, 14, 24, 0.35);
+    }
+    .hero-roll .slide {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      animation: heroFade 12s infinite ease-in-out;
+      display: flex;
+      align-items: flex-end;
+      padding: 1rem 1.15rem;
+      background-size: 180% 180%;
+    }
+    .hero-roll .slide:nth-child(1) {
+      animation-delay: 0s;
+      background-image:
+        radial-gradient(ellipse 80% 120% at 20% 20%, rgba(94, 184, 255, 0.35), transparent 55%),
+        radial-gradient(ellipse 70% 90% at 90% 10%, rgba(157, 125, 255, 0.28), transparent 50%),
+        linear-gradient(145deg, #0d1528, #0a0e18);
+    }
+    .hero-roll .slide:nth-child(2) {
+      animation-delay: 4s;
+      background-image:
+        radial-gradient(ellipse 90% 100% at 70% 80%, rgba(74, 222, 128, 0.18), transparent 55%),
+        radial-gradient(ellipse 60% 80% at 10% 60%, rgba(94, 184, 255, 0.22), transparent 50%),
+        linear-gradient(155deg, #101828, #0b0f16);
+    }
+    .hero-roll .slide:nth-child(3) {
+      animation-delay: 8s;
+      background-image:
+        radial-gradient(ellipse 100% 90% at 50% 0%, rgba(251, 191, 36, 0.12), transparent 45%),
+        radial-gradient(ellipse 80% 70% at 0% 100%, rgba(157, 125, 255, 0.2), transparent 55%),
+        linear-gradient(165deg, #0c1220, #080c14);
+    }
+    .hero-roll .slide strong {
+      font-size: 1.05rem;
+      font-weight: 750;
+      letter-spacing: -0.02em;
+      text-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+    }
+    .hero-roll .slide span {
+      display: block;
+      margin-top: 0.2rem;
+      font-size: 0.78rem;
+      color: rgba(238, 243, 255, 0.72);
+      font-weight: 500;
+    }
+    @keyframes heroFade {
+      0% { opacity: 0; }
+      4% { opacity: 1; }
+      30% { opacity: 1; }
+      34% { opacity: 0; }
+      100% { opacity: 0; }
+    }
   </style>
 </head>
 <body>
@@ -325,8 +386,8 @@
     <header>
       <div class="brand">
         <div class="brand-badge"><span></span> DIY drone stack</div>
-        <h1>drone DIY Build</h1>
-        <p class="tagline">Local build telemetry for your Pi — temperature, load, memory, uptime, storage, compute, and network tools in one view.</p>
+        <h1 id="page-title">DIY drone stack</h1>
+        <p class="tagline">Live host telemetry — temperature, load, memory, uptime, storage, and a simple network helper.</p>
       </div>
       <div class="status-bar" aria-live="polite">
         <span id="pill" class="pill wait">Connecting</span>
@@ -336,48 +397,51 @@
       </div>
     </header>
 
+    <section class="hero-roll" aria-label="Highlights">
+      <div class="slide">
+        <div>
+          <strong>Field telemetry</strong>
+          <span>Host metrics streamed every two seconds</span>
+        </div>
+      </div>
+      <div class="slide">
+        <div>
+          <strong>Build &amp; fly</strong>
+          <span>One port in the browser — same origin for UI and API</span>
+        </div>
+      </div>
+      <div class="slide">
+        <div>
+          <strong>Your network, your rules</strong>
+          <span>Static IPv4 snippets you apply with sudo on the Pi</span>
+        </div>
+      </div>
+    </section>
+
     <section class="grid" id="cards" aria-label="Host metrics"></section>
 
     <dialog id="net-dialog" class="net-dlg" aria-labelledby="net-dlg-title">
       <div class="net-dlg-inner">
         <h2 id="net-dlg-title">Network settings</h2>
         <p class="dlg-lead">
-          Read-only view of the host (via the stats container). Edits produce snippets you copy or download — apply on the Pi with
-          <code>sudo</code> (netplan, dhcpcd, or NetworkManager) outside Docker. Wrong routes can disconnect SSH; use console or a known-good window.
+          Set a <strong>static IPv4</strong> here. We generate a small <strong>netplan</strong> snippet — copy or download it, then apply on the Pi with
+          <code>sudo</code> (and restart networking). Bad addresses can drop SSH; use a console or a maintenance window.
         </p>
 
-        <div class="field" style="margin-bottom: 0.75rem">
-          <label for="nf-ro">Detected (JSON)</label>
-          <textarea id="nf-ro" class="code" readonly rows="6" aria-label="Detected network and compute"></textarea>
-        </div>
+        <p class="dlg-lead" id="nf-iface-note" style="margin-top: -0.35rem; font-size: 0.8rem"></p>
 
         <div class="net-grid two">
           <div class="field">
-            <label for="nf-iface">Interface</label>
-            <select id="nf-iface"></select>
-          </div>
-          <div class="field">
-            <label for="nf-mode">Mode</label>
-            <select id="nf-mode">
-              <option value="static">Static IPv4</option>
-              <option value="dhcp">DHCP</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="nf-ip">IPv4 address</label>
+            <label for="nf-ip">IP address</label>
             <input id="nf-ip" type="text" inputmode="numeric" autocomplete="off" placeholder="192.168.1.50" />
           </div>
           <div class="field">
-            <label for="nf-prefix">Prefix length</label>
-            <input id="nf-prefix" type="text" inputmode="numeric" autocomplete="off" placeholder="24" />
+            <label for="nf-netmask">Netmask</label>
+            <input id="nf-netmask" type="text" inputmode="numeric" autocomplete="off" placeholder="255.255.255.0" />
           </div>
-          <div class="field">
-            <label for="nf-gw">Default gateway</label>
+          <div class="field" style="grid-column: 1 / -1">
+            <label for="nf-gw">Gateway</label>
             <input id="nf-gw" type="text" inputmode="numeric" autocomplete="off" placeholder="192.168.1.1" />
-          </div>
-          <div class="field">
-            <label for="nf-dns">DNS</label>
-            <input id="nf-dns" type="text" autocomplete="off" placeholder="1.1.1.1" />
           </div>
         </div>
 
@@ -385,18 +449,12 @@
 
         <div class="field">
           <label for="nf-netplan">Generated netplan (YAML)</label>
-          <textarea id="nf-netplan" class="code" readonly rows="10"></textarea>
-        </div>
-        <div class="field" style="margin-top: 0.75rem">
-          <label for="nf-dhcpcd">Generated dhcpcd.conf fragment</label>
-          <textarea id="nf-dhcpcd" class="code" readonly rows="8"></textarea>
+          <textarea id="nf-netplan" class="code" readonly rows="12"></textarea>
         </div>
 
         <div class="dlg-actions">
           <button type="button" class="primary" id="nf-copy-netplan">Copy netplan</button>
-          <button type="button" id="nf-copy-dhcpcd">Copy dhcpcd</button>
           <button type="button" id="nf-dl-netplan">Download netplan.yaml</button>
-          <button type="button" id="nf-dl-dhcpcd">Download dhcpcd-snippet.conf</button>
           <button type="button" id="net-close">Close</button>
         </div>
       </div>
@@ -422,9 +480,9 @@
     const netOpen = document.getElementById("net-open");
     const netClose = document.getElementById("net-close");
 
-    const LS_NET = "hmi_network_draft_v1";
-
+    const LS_NET = "hmi_network_draft_v2";
     let lastMetrics = null;
+    let netIfaceChosen = "eth0";
 
     jsonBtn.addEventListener("click", () => {
       jsonPanel.classList.toggle("open");
@@ -480,14 +538,40 @@
       localStorage.setItem(LS_NET, JSON.stringify(obj));
     }
 
+    function netmaskToPrefix(nm) {
+      const a = String(nm)
+        .trim()
+        .split(".")
+        .map((t) => parseInt(t, 10));
+      if (a.length !== 4) return 24;
+      if (a.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return 24;
+      let v = 0;
+      for (let i = 0; i < 4; i++) v = (v << 8) | a[i];
+      v >>>= 0;
+      let prefix = 0;
+      for (let bit = 31; bit >= 0; bit--) {
+        if ((v >> bit) & 1) prefix++;
+        else break;
+      }
+      const expected = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+      if (expected !== v) return 24;
+      return prefix || 24;
+    }
+
+    function prefixToNetmask(p) {
+      const n = parseInt(String(p), 10);
+      if (Number.isNaN(n) || n < 0 || n > 32) return "255.255.255.0";
+      if (n === 0) return "0.0.0.0";
+      const mask = (0xffffffff << (32 - n)) >>> 0;
+      return [24, 16, 8, 0].map((s) => (mask >> s) & 255).join(".");
+    }
+
     function collectNetForm() {
       return {
-        iface: document.getElementById("nf-iface").value,
-        mode: document.getElementById("nf-mode").value,
+        iface: netIfaceChosen || "eth0",
         ip: document.getElementById("nf-ip").value.trim(),
-        prefix: document.getElementById("nf-prefix").value.trim(),
+        netmask: document.getElementById("nf-netmask").value.trim(),
         gateway: document.getElementById("nf-gw").value.trim(),
-        dns: document.getElementById("nf-dns").value.trim(),
       };
     }
 
@@ -495,66 +579,38 @@
       const f = collectNetForm();
       saveNetDraft(f);
       const netplanEl = document.getElementById("nf-netplan");
-      const dhcpcdEl = document.getElementById("nf-dhcpcd");
       const iface = f.iface || "eth0";
-      if (f.mode === "dhcp") {
-        netplanEl.value =
-          `# DHCP — example netplan (interface ${iface})\n` +
-          `network:\n  version: 2\n  ethernets:\n    ${iface}:\n      dhcp4: true\n`;
-        dhcpcdEl.value =
-          `# Remove static lines for ${iface} in /etc/dhcpcd.conf (or comment the block).\n` +
-          `# Then restart the network stack your OS uses (dhcpcd, NetworkManager, or netplan).\n`;
-        return;
-      }
-      const cidr = f.ip && f.prefix ? `${f.ip}/${f.prefix}` : `${f.ip || "192.168.1.50"}/24`;
+      const prefix = netmaskToPrefix(f.netmask || "255.255.255.0");
+      const cidr =
+        f.ip && f.netmask ? `${f.ip}/${prefix}` : `${f.ip || "192.168.1.50"}/${prefix || 24}`;
       netplanEl.value =
+        `# Static IPv4 — merge into /etc/netplan on the Pi, then: sudo netplan apply\n` +
         `network:\n  version: 2\n  ethernets:\n    ${iface}:\n      dhcp4: false\n` +
-        `      addresses:\n        - ${cidr}\n      routes:\n        - to: default\n          via: ${f.gateway || "192.168.1.1"}\n` +
-        `      nameservers:\n        addresses:\n          - ${f.dns || "1.1.1.1"}\n`;
-      dhcpcdEl.value =
-        `interface ${iface}\nstatic ip_address=${cidr}\nstatic routers=${f.gateway || "192.168.1.1"}\n` +
-        `static domain_name_servers=${f.dns || "1.1.1.1"}\n`;
+        `      addresses:\n        - ${cidr}\n      routes:\n        - to: default\n          via: ${f.gateway || "192.168.1.1"}\n`;
     }
 
     function syncNetFormFromMetrics() {
-      const ro = document.getElementById("nf-ro");
+      const note = document.getElementById("nf-iface-note");
+      const d = loadNetDraft();
+      const legacy = d.prefix && !d.netmask ? prefixToNetmask(d.prefix) : "";
       if (!lastMetrics) {
-        ro.value = "No telemetry yet — wait for Live, then reopen.";
+        if (note) note.textContent = "Live telemetry not loaded yet — using saved draft values.";
+        netIfaceChosen = d.iface || "eth0";
+        document.getElementById("nf-ip").value = d.ip || "";
+        document.getElementById("nf-netmask").value = d.netmask || legacy || "255.255.255.0";
+        document.getElementById("nf-gw").value = d.gateway || "";
+        updateNetGenerated();
         return;
       }
-      ro.value = JSON.stringify(
-        { compute: lastMetrics.compute, network: lastMetrics.network },
-        null,
-        2
-      );
       const net = lastMetrics.network || {};
       const dr = net.default_route || {};
-      const ifaces = (net.interfaces || []).map((i) => i.name);
-      const sel = document.getElementById("nf-iface");
-      sel.innerHTML = "";
-      if (!ifaces.length) {
-        const o = document.createElement("option");
-        o.value = "eth0";
-        o.textContent = "eth0 (default)";
-        sel.appendChild(o);
-      } else {
-        ifaces.forEach((n) => {
-          const o = document.createElement("option");
-          o.value = n;
-          o.textContent = n;
-          sel.appendChild(o);
-        });
+      netIfaceChosen = (dr.iface && String(dr.iface)) || d.iface || "eth0";
+      if (note) {
+        note.textContent = `Using interface ${netIfaceChosen} (from the host default route).`;
       }
-      const d = loadNetDraft();
-      let selIface = ifaces[0] || "eth0";
-      if (d.iface && ifaces.includes(d.iface)) selIface = d.iface;
-      else if (dr.iface && ifaces.includes(dr.iface)) selIface = dr.iface;
-      sel.value = selIface;
-      document.getElementById("nf-mode").value = d.mode === "dhcp" ? "dhcp" : "static";
       document.getElementById("nf-ip").value = d.ip || net.primary_ipv4_hint || "";
-      document.getElementById("nf-prefix").value = d.prefix || "24";
+      document.getElementById("nf-netmask").value = d.netmask || legacy || "255.255.255.0";
       document.getElementById("nf-gw").value = d.gateway || dr.gateway || "";
-      document.getElementById("nf-dns").value = d.dns || "1.1.1.1";
       updateNetGenerated();
     }
 
@@ -574,11 +630,8 @@
       if (netDialog) netDialog.close();
     });
 
-    ["nf-ip", "nf-prefix", "nf-gw", "nf-dns"].forEach((id) => {
+    ["nf-ip", "nf-netmask", "nf-gw"].forEach((id) => {
       document.getElementById(id).addEventListener("input", updateNetGenerated);
-    });
-    ["nf-iface", "nf-mode"].forEach((id) => {
-      document.getElementById(id).addEventListener("change", updateNetGenerated);
     });
 
     document.getElementById("nf-copy-netplan").addEventListener("click", async () => {
@@ -591,23 +644,9 @@
         document.execCommand("copy");
       }
     });
-    document.getElementById("nf-copy-dhcpcd").addEventListener("click", async () => {
-      updateNetGenerated();
-      const t = document.getElementById("nf-dhcpcd").value;
-      try {
-        await navigator.clipboard.writeText(t);
-      } catch {
-        document.getElementById("nf-dhcpcd").select();
-        document.execCommand("copy");
-      }
-    });
     document.getElementById("nf-dl-netplan").addEventListener("click", () => {
       updateNetGenerated();
       downloadText("drone-diy-build-netplan.yaml", document.getElementById("nf-netplan").value);
-    });
-    document.getElementById("nf-dl-dhcpcd").addEventListener("click", () => {
-      updateNetGenerated();
-      downloadText("drone-diy-build-dhcpcd-snippet.conf", document.getElementById("nf-dhcpcd").value);
     });
 
     function render(data) {
@@ -617,9 +656,15 @@
       const up = data.uptime || {};
       const comp = data.compute || {};
       const net = data.network || {};
+      const dr = net.default_route || {};
 
       const memPct = mem.mem_used_pct ?? null;
       const diskPct = disk.used_pct ?? null;
+
+      const host = (data.hostname && String(data.hostname).trim()) || "";
+      const titleEl = document.getElementById("page-title");
+      if (titleEl) titleEl.textContent = host || "DIY drone stack";
+      document.title = host ? `${host} · DIY stack` : "DIY drone stack";
 
       if (computeChip) {
         const short = comp.label || comp.machine || "";
@@ -632,17 +677,11 @@
         }
       }
 
-      const ifList = (net.interfaces || []).map((i) => i.name).join(", ") || "—";
-      const dr = net.default_route || {};
-      const routeTxt = [dr.iface, dr.gateway].filter(Boolean).join(" → ");
+      const routeBits = [dr.gateway && `Gateway ${dr.gateway}`, dr.iface && `via ${dr.iface}`]
+        .filter(Boolean)
+        .join(" ");
 
-      const items = [
-        {
-          title: "Hostname",
-          value: data.hostname ?? "—",
-          sub: "Kernel identity",
-        },
-      ];
+      const items = [];
 
       if (comp && (comp.label || comp.machine || comp.kind)) {
         items.push({
@@ -652,11 +691,11 @@
         });
       }
 
-      if (net && (net.interfaces || net.default_route || net.primary_ipv4_hint)) {
+      if (net && (net.default_route || net.primary_ipv4_hint)) {
         items.push({
           title: "Network",
-          value: net.primary_ipv4_hint || (routeTxt ? "See route" : "—"),
-          sub: [routeTxt && `Route: ${routeTxt}`, ifList && `ifaces: ${ifList}`].filter(Boolean).join(" · ") || "Host sysfs + route when /proc is host-mounted",
+          value: net.primary_ipv4_hint || "—",
+          sub: routeBits || "Default route from host /proc",
         });
       }
 
@@ -717,14 +756,11 @@
         lastMetrics = data;
         render(data);
         setPill("live", "Live");
-        if (netDialog && netDialog.open) {
-          document.getElementById("nf-ro").value = JSON.stringify(
-            { compute: data.compute, network: data.network },
-            null,
-            2
-          );
-        }
+        if (netDialog && netDialog.open) syncNetFormFromMetrics();
       } catch (e) {
+        const titleEl = document.getElementById("page-title");
+        if (titleEl) titleEl.textContent = "DIY drone stack";
+        document.title = "DIY drone stack";
         cards.innerHTML = `
           <article class="card" style="grid-column: 1 / -1">
             <h2>Link</h2>

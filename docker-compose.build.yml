@@ -1,6 +1,7 @@
-# Local build (no GHCR): merge with main compose.
+# Local dev only — merged with docker-compose.yml on your machine (never copied to the Pi alone).
+# Adds build.context for ./services/* so you can build without pulling from GHCR.
 #
-#   docker compose -f docker-compose.yml -f docker-compose.build.yml build
+#   bash ./deploy/build.sh
 #   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d
 
 services:
