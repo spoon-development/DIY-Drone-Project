@@ -1,4 +1,5 @@
-FROM arm64v8/debian:bookworm-slim
+# Multi-arch (amd64 + arm64) for laptop pulls and Raspberry Pi
+FROM debian:bookworm-slim
 
 RUN set -eux; \
     apt-get update; \

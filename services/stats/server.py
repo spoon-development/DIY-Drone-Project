@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import glob
 import json
 import os
 import re
@@ -119,6 +120,202 @@ def hostname() -> str | None:
     return h.strip() if h else None
 
 
+def _proc_route_paths() -> list[str]:
+    """Prefer host PID 1 netns (works when host /proc is bind-mounted)."""
+    return [f"{HOST_PROC}/1/net/route", f"{HOST_PROC}/net/route"]
+
+
+def _decode_route_ipv4(hex8: str) -> str | None:
+    """Decode IPv4 from /proc/net/route gateway/mask columns (32-bit LE hex word)."""
+    h = hex8.strip()
+    if len(h) != 8:
+        return None
+    try:
+        a = int(h, 16)
+        return ".".join(str((a >> (8 * i)) & 0xFF) for i in range(4))
+    except ValueError:
+        return None
+
+
+def default_ipv4_route() -> dict[str, Any]:
+    for path in _proc_route_paths():
+        text = _read(path)
+        if not text:
+            continue
+        lines = text.strip().splitlines()
+        if len(lines) < 2:
+            continue
+        for line in lines[1:]:
+            parts = line.split()
+            if len(parts) < 8:
+                continue
+            iface, dest, gw, mask = parts[0], parts[1], parts[2], parts[7]
+            if dest == "00000000" and mask == "00000000":
+                g = _decode_route_ipv4(gw)
+                if g == "0.0.0.0":
+                    g = None
+                return {"iface": iface, "gateway": g, "source": path}
+    return {}
+
+
+def _list_sysfs_net_ifaces() -> list[dict[str, Any]]:
+    base = f"{HOST_SYS}/class/net"
+    out: list[dict[str, Any]] = []
+    try:
+        names = sorted(os.listdir(base))
+    except OSError:
+        return out
+    for name in names:
+        if name == "lo":
+            continue
+        pfx = f"{base}/{name}"
+        mac = (_read(f"{pfx}/address") or "").strip()
+        state = (_read(f"{pfx}/operstate") or "").strip()
+        carrier = (_read(f"{pfx}/carrier") or "").strip()
+        row: dict[str, Any] = {"name": name, "operstate": state or None}
+        if mac and mac != "00:00:00:00:00:00":
+            row["mac"] = mac
+        if carrier in ("0", "1"):
+            row["carrier"] = carrier == "1"
+        out.append(row)
+    return out
+
+
+def _read_devicetree_model() -> str | None:
+    raw = _read(f"{HOST_ROOT}/sys/firmware/devicetree/base/model")
+    if not raw:
+        return None
+    return raw.replace("\x00", "").strip() or None
+
+
+def _parse_cpuinfo_board() -> dict[str, Any]:
+    text = _read(f"{HOST_PROC}/cpuinfo")
+    if not text:
+        return {}
+    out: dict[str, Any] = {}
+    for line in text.splitlines():
+        if ":" not in line:
+            continue
+        k, v = line.split(":", 1)
+        key = k.strip()
+        val = v.strip()
+        if key in ("Hardware", "Revision", "Model", "model name"):
+            out[key.replace(" ", "_").lower()] = val
+    return out
+
+
+def compute_profile() -> dict[str, Any]:
+    u = os.uname()
+    board = _parse_cpuinfo_board()
+    model = _read_devicetree_model()
+    kind = "unknown"
+    label_parts: list[str] = []
+    if model:
+        kind = "embedded"
+        label_parts.append(model)
+    elif board.get("hardware") or board.get("revision"):
+        kind = "embedded"
+        if board.get("hardware"):
+            label_parts.append(board["hardware"])
+        if board.get("revision"):
+            label_parts.append(f"rev {board['revision']}")
+    elif board.get("model_name"):
+        kind = "general"
+        label_parts.append(board["model_name"])
+    label = " · ".join(label_parts) if label_parts else None
+    return {
+        "kind": kind,
+        "label": label,
+        "kernel": u.release,
+        "machine": u.machine,
+        "cpuinfo": board or None,
+        "devicetree_model": model,
+    }
+
+
+def _grep_netplan_hints() -> list[dict[str, Any]]:
+    paths = sorted(glob.glob(f"{HOST_ROOT}/etc/netplan/*.yaml"))
+    paths += sorted(glob.glob(f"{HOST_ROOT}/etc/netplan/*.yml"))
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for path in paths:
+        if path in seen:
+            continue
+        seen.add(path)
+        text = _read(path)
+        if not text:
+            continue
+        hints: list[str] = []
+        for m in re.finditer(
+            r"(^\s*(?:addresses|gateway4|gateway6|routes|nameservers|dhcp4)\s*:.*$)",
+            text,
+            re.MULTILINE | re.IGNORECASE,
+        ):
+            hints.append(m.group(1).rstrip())
+        disp = path
+        if path.startswith(HOST_ROOT):
+            disp = path[len(HOST_ROOT) :] or "/"
+            if not disp.startswith("/"):
+                disp = "/" + disp
+        out.append({"path": disp, "hints": hints[:24]})
+    return out
+
+
+def _grep_dhcpcd_hints() -> list[str]:
+    text = _read(f"{HOST_ROOT}/etc/dhcpcd.conf")
+    if not text:
+        return []
+    hints: list[str] = []
+    for line in text.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        if any(
+            s.lower().startswith(p)
+            for p in (
+                "interface ",
+                "static ip_",
+                "static routers",
+                "static domain_",
+                "nogateway",
+                "fallback",
+            )
+        ):
+            hints.append(s)
+    return hints[:40]
+
+
+def network_summary() -> dict[str, Any]:
+    ifaces = _list_sysfs_net_ifaces()
+    route = default_ipv4_route()
+    netplan = _grep_netplan_hints()
+    dhcpcd = _grep_dhcpcd_hints()
+    primary = None
+    for block in netplan:
+        for h in block.get("hints", []):
+            m = re.search(
+                r"\b((?:\d{1,3}\.){3}\d{1,3})(?:/\d{1,2})?\b",
+                h,
+            )
+            if m:
+                primary = m.group(1)
+                break
+        if primary:
+            break
+    if not primary and dhcpcd:
+        for line in dhcpcd:
+            m = re.search(r"=\s*((?:\d{1,3}\.){3}\d{1,3})", line)
+            if m:
+                primary = m.group(1)
+                break
+    return {
+        "interfaces": ifaces,
+        "default_route": route or None,
+        "config_hints": {"netplan": netplan, "dhcpcd": dhcpcd},
+        "primary_ipv4_hint": primary,
+    }
+
+
 def collect() -> dict[str, Any]:
     return {
         "hostname": hostname(),
@@ -127,6 +324,8 @@ def collect() -> dict[str, Any]:
         "memory": memory_mb(),
         "uptime": uptime(),
         "disk_root": disk_root(),
+        "compute": compute_profile(),
+        "network": network_summary(),
     }
 
 

@@ -1,0 +1,13 @@
+# Local build (no GHCR): merge with main compose.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml build
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d
+
+services:
+  stats:
+    build:
+      context: ./services/stats
+
+  hmi:
+    build:
+      context: ./services/hmi

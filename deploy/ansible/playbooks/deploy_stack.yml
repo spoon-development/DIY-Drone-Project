@@ -1,0 +1,64 @@
+---
+# Deploy Drone Bros stats + HMI stack to any host with Docker + Compose v2.
+#
+# From repo root (after: pip install ansible):
+#   ansible-playbook deploy/ansible/playbooks/deploy_stack.yml \
+#     -i '192.168.1.50,' \
+#     -e ansible_user=pi \
+#     -e skip_image_pull=false
+#
+# Offline (no registry on device): build/save images elsewhere, docker load on device,
+# then run with -e skip_image_pull=true
+
+- name: Drone Bros Inc — deploy stats + HMI
+  hosts: all
+  gather_facts: false
+  vars:
+    deploy_dir: /opt/dronebros
+    skip_image_pull: false
+  tasks:
+    - name: Ensure deploy directory
+      ansible.builtin.file:
+        path: "{{ deploy_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Install docker compose file
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../../docker-compose.yml"
+        dest: "{{ deploy_dir }}/docker-compose.yml"
+        mode: "0644"
+
+    - name: Seed .env from example (once)
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../../.env.example"
+        dest: "{{ deploy_dir }}/.env"
+        force: false
+        mode: "0644"
+
+    - name: Pull images from registry
+      ansible.builtin.command: docker compose pull
+      args:
+        chdir: "{{ deploy_dir }}"
+      when: not (skip_image_pull | bool)
+      register: compose_pull
+      changed_when: false
+      failed_when: compose_pull.rc != 0
+
+    - name: Start stack
+      ansible.builtin.command: docker compose up -d
+      args:
+        chdir: "{{ deploy_dir }}"
+      register: compose_up
+      changed_when: compose_up.rc == 0
+
+    - name: Show running containers
+      ansible.builtin.command: docker compose ps
+      args:
+        chdir: "{{ deploy_dir }}"
+      register: compose_ps
+      changed_when: false
+
+    - name: Print status
+      ansible.builtin.debug:
+        msg: "{{ compose_ps.stdout_lines }}"

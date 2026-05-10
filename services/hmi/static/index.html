@@ -231,6 +231,92 @@
       word-break: break-word;
     }
     .json-panel.open { display: block; }
+    .header-btn {
+      background: rgba(94, 184, 255, 0.12);
+      border: 1px solid rgba(94, 184, 255, 0.35);
+      color: var(--accent);
+      border-radius: 999px;
+      padding: 0.35rem 0.85rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .header-btn:hover { background: rgba(94, 184, 255, 0.2); }
+    .compute-chip {
+      font-size: 0.72rem;
+      color: var(--muted);
+      max-width: 220px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .net-dlg {
+      max-width: 640px;
+      width: calc(100% - 2rem);
+      border: none;
+      border-radius: var(--radius);
+      padding: 0;
+      background: linear-gradient(165deg, #0a0f18, var(--bg1));
+      color: var(--text);
+      box-shadow: var(--shadow);
+      border: 1px solid var(--card-border);
+    }
+    .net-dlg::backdrop { background: rgba(0, 0, 0, 0.55); }
+    .net-dlg-inner { padding: 1.25rem 1.35rem 1.4rem; margin: 0; }
+    .net-dlg h2 { margin: 0 0 0.35rem; font-size: 1.05rem; font-weight: 700; }
+    .net-dlg .dlg-lead { margin: 0 0 1rem; color: var(--muted); font-size: 0.86rem; line-height: 1.45; }
+    .net-grid { display: grid; gap: 0.75rem; }
+    @media (min-width: 520px) {
+      .net-grid.two { grid-template-columns: 1fr 1fr; }
+    }
+    .field label {
+      display: block;
+      font-size: 0.72rem;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 0.25rem;
+      font-weight: 600;
+    }
+    .field input,
+    .field select,
+    .field textarea {
+      width: 100%;
+      padding: 0.45rem 0.55rem;
+      border-radius: 10px;
+      border: 1px solid var(--card-border);
+      background: rgba(0, 0, 0, 0.25);
+      color: var(--text);
+      font-family: var(--font);
+    }
+    .field textarea.code {
+      min-height: 112px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.72rem;
+      line-height: 1.4;
+    }
+    .dlg-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+    .dlg-actions button {
+      border-radius: 10px;
+      border: 1px solid var(--card-border);
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      padding: 0.45rem 0.75rem;
+      font-size: 0.8rem;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .dlg-actions button.primary {
+      border-color: rgba(94, 184, 255, 0.45);
+      background: rgba(94, 184, 255, 0.14);
+      color: var(--accent);
+    }
+    .dlg-hr {
+      margin: 1rem 0 0.75rem;
+      border: none;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
   </style>
 </head>
 <body>
@@ -244,11 +330,77 @@
       </div>
       <div class="status-bar" aria-live="polite">
         <span id="pill" class="pill wait">Connecting</span>
+        <span class="compute-chip" id="compute-chip" hidden></span>
+        <button type="button" class="header-btn" id="net-open">Network…</button>
         <span class="clock" id="clock"></span>
       </div>
     </header>
 
     <section class="grid" id="cards" aria-label="Host metrics"></section>
+
+    <dialog id="net-dialog" class="net-dlg" aria-labelledby="net-dlg-title">
+      <div class="net-dlg-inner">
+        <h2 id="net-dlg-title">Network settings</h2>
+        <p class="dlg-lead">
+          Read-only view of the host (via the stats container). Edits produce snippets you copy or download — apply on the Pi with
+          <code>sudo</code> (netplan, dhcpcd, or NetworkManager) outside Docker. Wrong routes can disconnect SSH; use console or a known-good window.
+        </p>
+
+        <div class="field" style="margin-bottom: 0.75rem">
+          <label for="nf-ro">Detected (JSON)</label>
+          <textarea id="nf-ro" class="code" readonly rows="6" aria-label="Detected network and compute"></textarea>
+        </div>
+
+        <div class="net-grid two">
+          <div class="field">
+            <label for="nf-iface">Interface</label>
+            <select id="nf-iface"></select>
+          </div>
+          <div class="field">
+            <label for="nf-mode">Mode</label>
+            <select id="nf-mode">
+              <option value="static">Static IPv4</option>
+              <option value="dhcp">DHCP</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="nf-ip">IPv4 address</label>
+            <input id="nf-ip" type="text" inputmode="numeric" autocomplete="off" placeholder="192.168.1.50" />
+          </div>
+          <div class="field">
+            <label for="nf-prefix">Prefix length</label>
+            <input id="nf-prefix" type="text" inputmode="numeric" autocomplete="off" placeholder="24" />
+          </div>
+          <div class="field">
+            <label for="nf-gw">Default gateway</label>
+            <input id="nf-gw" type="text" inputmode="numeric" autocomplete="off" placeholder="192.168.1.1" />
+          </div>
+          <div class="field">
+            <label for="nf-dns">DNS</label>
+            <input id="nf-dns" type="text" autocomplete="off" placeholder="1.1.1.1" />
+          </div>
+        </div>
+
+        <hr class="dlg-hr" />
+
+        <div class="field">
+          <label for="nf-netplan">Generated netplan (YAML)</label>
+          <textarea id="nf-netplan" class="code" readonly rows="10"></textarea>
+        </div>
+        <div class="field" style="margin-top: 0.75rem">
+          <label for="nf-dhcpcd">Generated dhcpcd.conf fragment</label>
+          <textarea id="nf-dhcpcd" class="code" readonly rows="8"></textarea>
+        </div>
+
+        <div class="dlg-actions">
+          <button type="button" class="primary" id="nf-copy-netplan">Copy netplan</button>
+          <button type="button" id="nf-copy-dhcpcd">Copy dhcpcd</button>
+          <button type="button" id="nf-dl-netplan">Download netplan.yaml</button>
+          <button type="button" id="nf-dl-dhcpcd">Download dhcpcd-snippet.conf</button>
+          <button type="button" id="net-close">Close</button>
+        </div>
+      </div>
+    </dialog>
 
     <button type="button" class="json-toggle" id="json-btn" hidden>Show raw JSON</button>
     <pre class="json-panel" id="json-panel" aria-hidden="true"></pre>
@@ -265,6 +417,14 @@
     const clock = document.getElementById("clock");
     const jsonBtn = document.getElementById("json-btn");
     const jsonPanel = document.getElementById("json-panel");
+    const computeChip = document.getElementById("compute-chip");
+    const netDialog = document.getElementById("net-dialog");
+    const netOpen = document.getElementById("net-open");
+    const netClose = document.getElementById("net-close");
+
+    const LS_NET = "hmi_network_draft_v1";
+
+    let lastMetrics = null;
 
     jsonBtn.addEventListener("click", () => {
       jsonPanel.classList.toggle("open");
@@ -280,6 +440,14 @@
     function setPill(state, text) {
       pill.className = "pill " + state;
       pill.textContent = text;
+    }
+
+    function escHtml(s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
     }
 
     function bar(pct) {
@@ -300,14 +468,173 @@
       return parts.join(" ");
     }
 
+    function loadNetDraft() {
+      try {
+        return JSON.parse(localStorage.getItem(LS_NET) || "{}");
+      } catch {
+        return {};
+      }
+    }
+
+    function saveNetDraft(obj) {
+      localStorage.setItem(LS_NET, JSON.stringify(obj));
+    }
+
+    function collectNetForm() {
+      return {
+        iface: document.getElementById("nf-iface").value,
+        mode: document.getElementById("nf-mode").value,
+        ip: document.getElementById("nf-ip").value.trim(),
+        prefix: document.getElementById("nf-prefix").value.trim(),
+        gateway: document.getElementById("nf-gw").value.trim(),
+        dns: document.getElementById("nf-dns").value.trim(),
+      };
+    }
+
+    function updateNetGenerated() {
+      const f = collectNetForm();
+      saveNetDraft(f);
+      const netplanEl = document.getElementById("nf-netplan");
+      const dhcpcdEl = document.getElementById("nf-dhcpcd");
+      const iface = f.iface || "eth0";
+      if (f.mode === "dhcp") {
+        netplanEl.value =
+          `# DHCP — example netplan (interface ${iface})\n` +
+          `network:\n  version: 2\n  ethernets:\n    ${iface}:\n      dhcp4: true\n`;
+        dhcpcdEl.value =
+          `# Remove static lines for ${iface} in /etc/dhcpcd.conf (or comment the block).\n` +
+          `# Then restart the network stack your OS uses (dhcpcd, NetworkManager, or netplan).\n`;
+        return;
+      }
+      const cidr = f.ip && f.prefix ? `${f.ip}/${f.prefix}` : `${f.ip || "192.168.1.50"}/24`;
+      netplanEl.value =
+        `network:\n  version: 2\n  ethernets:\n    ${iface}:\n      dhcp4: false\n` +
+        `      addresses:\n        - ${cidr}\n      routes:\n        - to: default\n          via: ${f.gateway || "192.168.1.1"}\n` +
+        `      nameservers:\n        addresses:\n          - ${f.dns || "1.1.1.1"}\n`;
+      dhcpcdEl.value =
+        `interface ${iface}\nstatic ip_address=${cidr}\nstatic routers=${f.gateway || "192.168.1.1"}\n` +
+        `static domain_name_servers=${f.dns || "1.1.1.1"}\n`;
+    }
+
+    function syncNetFormFromMetrics() {
+      const ro = document.getElementById("nf-ro");
+      if (!lastMetrics) {
+        ro.value = "No telemetry yet — wait for Live, then reopen.";
+        return;
+      }
+      ro.value = JSON.stringify(
+        { compute: lastMetrics.compute, network: lastMetrics.network },
+        null,
+        2
+      );
+      const net = lastMetrics.network || {};
+      const dr = net.default_route || {};
+      const ifaces = (net.interfaces || []).map((i) => i.name);
+      const sel = document.getElementById("nf-iface");
+      sel.innerHTML = "";
+      if (!ifaces.length) {
+        const o = document.createElement("option");
+        o.value = "eth0";
+        o.textContent = "eth0 (default)";
+        sel.appendChild(o);
+      } else {
+        ifaces.forEach((n) => {
+          const o = document.createElement("option");
+          o.value = n;
+          o.textContent = n;
+          sel.appendChild(o);
+        });
+      }
+      const d = loadNetDraft();
+      let selIface = ifaces[0] || "eth0";
+      if (d.iface && ifaces.includes(d.iface)) selIface = d.iface;
+      else if (dr.iface && ifaces.includes(dr.iface)) selIface = dr.iface;
+      sel.value = selIface;
+      document.getElementById("nf-mode").value = d.mode === "dhcp" ? "dhcp" : "static";
+      document.getElementById("nf-ip").value = d.ip || net.primary_ipv4_hint || "";
+      document.getElementById("nf-prefix").value = d.prefix || "24";
+      document.getElementById("nf-gw").value = d.gateway || dr.gateway || "";
+      document.getElementById("nf-dns").value = d.dns || "1.1.1.1";
+      updateNetGenerated();
+    }
+
+    function downloadText(filename, text) {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    netOpen.addEventListener("click", () => {
+      syncNetFormFromMetrics();
+      if (netDialog && typeof netDialog.showModal === "function") netDialog.showModal();
+    });
+    netClose.addEventListener("click", () => {
+      if (netDialog) netDialog.close();
+    });
+
+    ["nf-ip", "nf-prefix", "nf-gw", "nf-dns"].forEach((id) => {
+      document.getElementById(id).addEventListener("input", updateNetGenerated);
+    });
+    ["nf-iface", "nf-mode"].forEach((id) => {
+      document.getElementById(id).addEventListener("change", updateNetGenerated);
+    });
+
+    document.getElementById("nf-copy-netplan").addEventListener("click", async () => {
+      updateNetGenerated();
+      const t = document.getElementById("nf-netplan").value;
+      try {
+        await navigator.clipboard.writeText(t);
+      } catch {
+        document.getElementById("nf-netplan").select();
+        document.execCommand("copy");
+      }
+    });
+    document.getElementById("nf-copy-dhcpcd").addEventListener("click", async () => {
+      updateNetGenerated();
+      const t = document.getElementById("nf-dhcpcd").value;
+      try {
+        await navigator.clipboard.writeText(t);
+      } catch {
+        document.getElementById("nf-dhcpcd").select();
+        document.execCommand("copy");
+      }
+    });
+    document.getElementById("nf-dl-netplan").addEventListener("click", () => {
+      updateNetGenerated();
+      downloadText("dronebros-netplan.yaml", document.getElementById("nf-netplan").value);
+    });
+    document.getElementById("nf-dl-dhcpcd").addEventListener("click", () => {
+      updateNetGenerated();
+      downloadText("dronebros-dhcpcd-snippet.conf", document.getElementById("nf-dhcpcd").value);
+    });
+
     function render(data) {
       const mem = data.memory || {};
       const load = data.loadavg || {};
       const disk = data.disk_root || {};
       const up = data.uptime || {};
+      const comp = data.compute || {};
+      const net = data.network || {};
 
       const memPct = mem.mem_used_pct ?? null;
       const diskPct = disk.used_pct ?? null;
+
+      if (computeChip) {
+        const short = comp.label || comp.machine || "";
+        if (short) {
+          computeChip.hidden = false;
+          computeChip.textContent = short;
+          computeChip.title = [comp.kind, comp.kernel].filter(Boolean).join(" · ");
+        } else {
+          computeChip.hidden = true;
+        }
+      }
+
+      const ifList = (net.interfaces || []).map((i) => i.name).join(", ") || "—";
+      const dr = net.default_route || {};
+      const routeTxt = [dr.iface, dr.gateway].filter(Boolean).join(" → ");
 
       const items = [
         {
@@ -315,6 +642,25 @@
           value: data.hostname ?? "—",
           sub: "Kernel identity",
         },
+      ];
+
+      if (comp && (comp.label || comp.machine || comp.kind)) {
+        items.push({
+          title: "Compute",
+          value: comp.label || comp.machine || "—",
+          sub: [comp.kind, comp.kernel, comp.machine].filter(Boolean).join(" · ") || "Host profile via /proc and devicetree",
+        });
+      }
+
+      if (net && (net.interfaces || net.default_route || net.primary_ipv4_hint)) {
+        items.push({
+          title: "Network",
+          value: net.primary_ipv4_hint || (routeTxt ? "See route" : "—"),
+          sub: [routeTxt && `Route: ${routeTxt}`, ifList && `ifaces: ${ifList}`].filter(Boolean).join(" · ") || "Host sysfs + route when /proc is host-mounted",
+        });
+      }
+
+      items.push(
         {
           title: "CPU temperature",
           value: data.cpu_temp_c != null ? `${data.cpu_temp_c} °C` : "—",
@@ -344,16 +690,16 @@
           value: disk.used_pct != null ? `${disk.used_pct}% used` : disk.mounted === false ? "n/a" : "—",
           sub: disk.total_mb != null ? `${disk.used_mb ?? "?"} / ${disk.total_mb} MB` : "",
           extra: diskPct != null ? bar(diskPct) : "",
-        },
-      ];
+        }
+      );
 
       cards.innerHTML = items
         .map(
           (c) => `
         <article class="card">
           <h2>${c.title}</h2>
-          <div class="metric">${c.value}</div>
-          ${c.sub ? `<div class="sub">${c.sub}</div>` : ""}
+          <div class="metric">${escHtml(c.value)}</div>
+          ${c.sub ? `<div class="sub">${escHtml(c.sub)}</div>` : ""}
           ${c.extra || ""}
         </article>`
         )
@@ -368,14 +714,22 @@
         const res = await fetch("/api/stats", { cache: "no-store" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
+        lastMetrics = data;
         render(data);
         setPill("live", "Live");
+        if (netDialog && netDialog.open) {
+          document.getElementById("nf-ro").value = JSON.stringify(
+            { compute: data.compute, network: data.network },
+            null,
+            2
+          );
+        }
       } catch (e) {
         cards.innerHTML = `
           <article class="card" style="grid-column: 1 / -1">
             <h2>Link</h2>
             <div class="metric" style="font-size:1.1rem">Stats unreachable</div>
-            <div class="sub">${String(e.message || e)} — confirm the stats container is running and nginx can reach <code>stats:9101</code>.</div>
+            <div class="sub">${escHtml(String(e.message || e))} — confirm the stats container is running and nginx can reach <code>stats:9101</code>.</div>
           </article>`;
         setPill("err", "Offline");
         jsonBtn.hidden = true;

@@ -1,0 +1,36 @@
+---
+# Future-friendly pattern: run a single pre-built image on a target (extend as needed).
+#
+# Example:
+#   ansible-playbook deploy/ansible/playbooks/deploy_service_image.yml \
+#     -i '10.0.0.3,' -e ansible_user=pi \
+#     -e service_image=ghcr.io/myorg/some-service:latest \
+#     -e service_name=my-service \
+#     -e 'service_ports=9101:9101'
+
+- name: Run one container from a registry image
+  hosts: all
+  gather_facts: false
+  vars:
+    service_image: "{{ service_image | mandatory }}"
+    service_name: "{{ service_name | mandatory }}"
+    service_ports: ""
+  tasks:
+    - name: Pull image
+      ansible.builtin.command: "docker pull {{ service_image }}"
+
+    - name: Remove existing container if present
+      ansible.builtin.command: "docker rm -f {{ service_name }}"
+      failed_when: false
+      changed_when: false
+
+    - name: Start container (simple pattern — adjust publish/volumes per service)
+      ansible.builtin.shell: |
+        set -euo pipefail
+        if [ -z "{{ service_ports }}" ]; then
+          docker run -d --name "{{ service_name }}" --restart unless-stopped "{{ service_image }}"
+        else
+          docker run -d --name "{{ service_name }}" --restart unless-stopped -p "{{ service_ports }}" "{{ service_image }}"
+        fi
+      args:
+        executable: /bin/bash

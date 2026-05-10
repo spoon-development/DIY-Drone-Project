@@ -1,4 +1,4 @@
-# Build linux/arm64 images and push to GHCR (stats + HMI only).
+# Multi-arch images for GHCR: amd64 (WSL/PC) + arm64 (Raspberry Pi).
 
 name: Build and push images (GHCR)
 
@@ -14,7 +14,7 @@ permissions:
   packages: write
 
 env:
-  PLATFORM: linux/arm64
+  PLATFORM: linux/amd64,linux/arm64
 
 jobs:
   build-push:
