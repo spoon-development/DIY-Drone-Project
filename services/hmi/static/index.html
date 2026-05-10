@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Drone HMI</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f1419;
+      --panel: #1a222c;
+      --text: #e8eef4;
+      --muted: #8b9bab;
+      --accent: #3d9cfd;
+      --warn: #f0a030;
+      --err: #e05858;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid #243041;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    h1 { font-size: 1.1rem; margin: 0; font-weight: 600; }
+    .sub { color: var(--muted); font-size: 0.85rem; }
+    main { padding: 1rem 1.25rem 2rem; max-width: 1200px; margin: 0 auto; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+    @media (min-width: 960px) {
+      .grid { grid-template-columns: 2fr 1fr; align-items: start; }
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid #243041;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .card h2 {
+      margin: 0;
+      padding: 0.65rem 1rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border-bottom: 1px solid #243041;
+    }
+    .video-wrap {
+      position: relative;
+      background: #000;
+      min-height: 240px;
+    }
+    .video-wrap img {
+      display: block;
+      width: 100%;
+      height: auto;
+      max-height: 70vh;
+      object-fit: contain;
+    }
+    .banner {
+      padding: 0.75rem 1rem;
+      font-size: 0.9rem;
+      border-top: 1px solid #243041;
+      color: var(--muted);
+    }
+    .banner.err { color: var(--err); }
+    .banner.warn { color: var(--warn); }
+    .stats { padding: 0.75rem 1rem 1rem; font-size: 0.9rem; }
+    dl {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.35rem 1rem;
+      margin: 0;
+    }
+    dt { color: var(--muted); }
+    dd { margin: 0; font-variant-numeric: tabular-nums; }
+    pre.raw {
+      margin: 0.75rem 0 0;
+      padding: 0.75rem;
+      background: #0b0f14;
+      border-radius: 8px;
+      font-size: 0.75rem;
+      overflow: auto;
+      max-height: 220px;
+      color: #c8d6e5;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Drone HMI</h1>
+      <div class="sub">Video (USB / V4L2) and host stats — <span id="clock"></span></div>
+    </div>
+  </header>
+  <main>
+    <div class="grid">
+      <section class="card">
+        <h2>Camera</h2>
+        <div class="video-wrap">
+          <img id="feed" src="/stream/" alt="Live feed" />
+        </div>
+        <div id="feed-msg" class="banner">Waiting for stream…</div>
+      </section>
+      <section class="card">
+        <h2>Host metrics</h2>
+        <div class="stats">
+          <dl id="stats-dl"></dl>
+          <pre id="stats-raw" class="raw" hidden></pre>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script>
+    const feed = document.getElementById("feed");
+    const feedMsg = document.getElementById("feed-msg");
+    const dl = document.getElementById("stats-dl");
+    const raw = document.getElementById("stats-raw");
+    const clock = document.getElementById("clock");
+
+    function tickClock() {
+      clock.textContent = new Date().toLocaleString();
+    }
+    tickClock();
+    setInterval(tickClock, 1000);
+
+    feed.addEventListener("load", () => {
+      feedMsg.textContent = "Stream connected.";
+      feedMsg.className = "banner";
+    });
+    feed.addEventListener("error", () => {
+      feedMsg.textContent = "Stream unavailable (camera unplugged, wrong format, or video container down). Try USE_TEST_PATTERN=1 for a test pattern.";
+      feedMsg.className = "banner err";
+    });
+
+    function fmtUptime(sec) {
+      if (sec == null || Number.isNaN(sec)) return "—";
+      const s = Math.floor(sec);
+      const d = Math.floor(s / 86400);
+      const h = Math.floor((s % 86400) / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const parts = [];
+      if (d) parts.push(`${d}d`);
+      if (h || d) parts.push(`${h}h`);
+      parts.push(`${m}m`);
+      return parts.join(" ");
+    }
+
+    function renderStats(data) {
+      const rows = [];
+      const push = (k, v) => rows.push([k, v]);
+
+      push("Hostname", data.hostname ?? "—");
+      push("CPU temp", data.cpu_temp_c != null ? `${data.cpu_temp_c} °C` : "—");
+      const l = data.loadavg || {};
+      push("Load (1 / 5 / 15m)", [l["1m"], l["5m"], l["15m"]].every((x) => x != null)
+        ? `${l["1m"]} / ${l["5m"]} / ${l["15m"]}`
+        : "—");
+      const mem = data.memory || {};
+      push(
+        "Memory",
+        mem.mem_used_pct != null
+          ? `${mem.mem_used_pct}% used (${mem.mem_used_mb ?? "?"}/${mem.mem_total_mb ?? "?"} MB)`
+          : "—"
+      );
+      const up = data.uptime || {};
+      push("Uptime", fmtUptime(up.uptime_seconds));
+      const disk = data.disk_root || {};
+      push(
+        "Disk (/)",
+        disk.used_pct != null
+          ? `${disk.used_pct}% used (${disk.used_mb ?? "?"}/${disk.total_mb ?? "?"} MB)`
+          : disk.mounted === false ? "not mounted" : "—"
+      );
+
+      dl.innerHTML = rows
+        .map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`)
+        .join("");
+      raw.textContent = JSON.stringify(data, null, 2);
+    }
+
+    async function pollStats() {
+      try {
+        const res = await fetch("/api/stats", { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        renderStats(data);
+        raw.hidden = true;
+      } catch (e) {
+        dl.innerHTML = `<dt>Stats</dt><dd class="err">Error: ${e.message}</dd>`;
+        raw.hidden = false;
+        raw.textContent = String(e);
+      }
+    }
+
+    pollStats();
+    setInterval(pollStats, 2000);
+  </script>
+</body>
+</html>

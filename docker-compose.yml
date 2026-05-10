@@ -1,0 +1,71 @@
+# Pi 5 / ARM64 stack: USB camera (V4L2) → MJPEG, stats API, single-port HMI.
+#
+# On the Pi:
+#   docker compose build
+#   docker compose up -d
+#
+# UI: http://<pi-ip>:8080/
+# Logs: docker compose logs -f
+#
+# No camera yet: set USE_TEST_PATTERN=1 on video-stream (see compose) or plug USB cam on /dev/video0.
+
+services:
+  video-stream:
+    build:
+      context: ./services/video-stream
+    restart: unless-stopped
+    # USB camera on the host appears under /dev/video*; privileged avoids compose
+    # failing when /dev/video0 is absent (use USE_TEST_PATTERN=1 until the cam arrives).
+    privileged: true
+    networks:
+      - drone-net
+    logging: &default-logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "4"
+    environment:
+      V4L2_DEVICE: ${V4L2_DEVICE:-/dev/video0}
+      # mjpeg (preferred if the cam supports it) or yuyv422
+      V4L2_INPUT_FORMAT: ${V4L2_INPUT_FORMAT:-mjpeg}
+      VIDEO_WIDTH: ${VIDEO_WIDTH:-640}
+      VIDEO_HEIGHT: ${VIDEO_HEIGHT:-480}
+      VIDEO_FPS: ${VIDEO_FPS:-25}
+      FFMPEG_LOGLEVEL: ${FFMPEG_LOGLEVEL:-info}
+      # 1 = synthetic pattern (no /dev/video0 needed) for UI / network tests
+      USE_TEST_PATTERN: ${USE_TEST_PATTERN:-0}
+
+  stats:
+    build:
+      context: ./services/stats
+    restart: unless-stopped
+    networks:
+      - drone-net
+    logging:
+      <<: *default-logging
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host_root:ro
+    environment:
+      HOST_PROC: /host/proc
+      HOST_SYS: /host/sys
+      HOST_ROOT: /host_root
+
+  hmi:
+    build:
+      context: ./services/hmi
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - video-stream
+      - stats
+    networks:
+      - drone-net
+    logging:
+      <<: *default-logging
+
+networks:
+  drone-net:
+    driver: bridge
