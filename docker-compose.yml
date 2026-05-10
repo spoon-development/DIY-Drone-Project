@@ -1,48 +1,25 @@
-# Pi 5 / ARM64 stack: USB camera (V4L2) → MJPEG, stats API, single-port HMI.
+# Drone Bros Inc — stats + HMI only. One published port (HMI); stats API is internal.
 #
-# On the Pi:
-#   docker compose build
-#   docker compose up -d
+# Images: pre-built on GitHub Actions → GHCR (linux/arm64). On the Pi:
+#   docker compose pull && docker compose up -d
 #
-# UI: http://<pi-ip>:8080/
-# Logs: docker compose logs -f
-#
-# No camera yet: set USE_TEST_PATTERN=1 on video-stream (see compose) or plug USB cam on /dev/video0.
+# Offline: load a tar from your laptop (`scripts/export-images.sh`) then `docker compose up -d`
+#   with pull skipped — see deploy/ansible and README.
+
+name: dronebros
 
 services:
-  video-stream:
-    build:
-      context: ./services/video-stream
+  stats:
+    image: ${IMAGE_REGISTRY:-ghcr.io/spoon-development}/dronebros-stats:${IMAGE_TAG:-latest}
+    container_name: dronebros-stats
     restart: unless-stopped
-    # USB camera on the host appears under /dev/video*; privileged avoids compose
-    # failing when /dev/video0 is absent (use USE_TEST_PATTERN=1 until the cam arrives).
-    privileged: true
     networks:
-      - drone-net
-    logging: &default-logging
+      - dronebros
+    logging: &log
       driver: json-file
       options:
         max-size: "10m"
         max-file: "4"
-    environment:
-      V4L2_DEVICE: ${V4L2_DEVICE:-/dev/video0}
-      # mjpeg (preferred if the cam supports it) or yuyv422
-      V4L2_INPUT_FORMAT: ${V4L2_INPUT_FORMAT:-mjpeg}
-      VIDEO_WIDTH: ${VIDEO_WIDTH:-640}
-      VIDEO_HEIGHT: ${VIDEO_HEIGHT:-480}
-      VIDEO_FPS: ${VIDEO_FPS:-25}
-      FFMPEG_LOGLEVEL: ${FFMPEG_LOGLEVEL:-info}
-      # 1 = synthetic pattern (no /dev/video0 needed) for UI / network tests
-      USE_TEST_PATTERN: ${USE_TEST_PATTERN:-0}
-
-  stats:
-    build:
-      context: ./services/stats
-    restart: unless-stopped
-    networks:
-      - drone-net
-    logging:
-      <<: *default-logging
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -53,19 +30,18 @@ services:
       HOST_ROOT: /host_root
 
   hmi:
-    build:
-      context: ./services/hmi
+    image: ${IMAGE_REGISTRY:-ghcr.io/spoon-development}/dronebros-hmi:${IMAGE_TAG:-latest}
+    container_name: dronebros-hmi
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "${HMI_HOST_PORT:-8080}:80"
     depends_on:
-      - video-stream
       - stats
     networks:
-      - drone-net
+      - dronebros
     logging:
-      <<: *default-logging
+      <<: *log
 
 networks:
-  drone-net:
+  dronebros:
     driver: bridge

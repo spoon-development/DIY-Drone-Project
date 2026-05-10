@@ -3,131 +3,273 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Drone HMI</title>
+  <title>Drone Bros Inc — Flight Deck</title>
   <style>
     :root {
       color-scheme: dark;
-      --bg: #0f1419;
-      --panel: #1a222c;
-      --text: #e8eef4;
-      --muted: #8b9bab;
-      --accent: #3d9cfd;
-      --warn: #f0a030;
-      --err: #e05858;
+      --bg0: #070a10;
+      --bg1: #0d1220;
+      --card: rgba(22, 30, 48, 0.72);
+      --card-border: rgba(120, 170, 255, 0.12);
+      --text: #eef3ff;
+      --muted: #8b9cc4;
+      --accent: #5eb8ff;
+      --accent2: #9d7dff;
+      --good: #4ade80;
+      --warn: #fbbf24;
+      --bad: #f87171;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+      --radius: 16px;
+      --font: ui-sans-serif, system-ui, "Segoe UI", Roboto, Ubuntu, Cantarell, "Noto Sans", sans-serif;
     }
     * { box-sizing: border-box; }
+    html, body { height: 100%; }
     body {
       margin: 0;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, sans-serif;
-      background: var(--bg);
+      font-family: var(--font);
       color: var(--text);
+      background:
+        radial-gradient(1200px 600px at 15% -10%, rgba(94, 184, 255, 0.18), transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, rgba(157, 125, 255, 0.16), transparent 50%),
+        linear-gradient(165deg, var(--bg0), var(--bg1) 45%, #0a0f18);
       min-height: 100vh;
     }
+    .noise {
+      pointer-events: none;
+      position: fixed;
+      inset: 0;
+      opacity: 0.035;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      mix-blend-mode: overlay;
+    }
+    .wrap {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 1.75rem 1.25rem 3rem;
+      position: relative;
+      z-index: 1;
+    }
     header {
-      padding: 1rem 1.25rem;
-      border-bottom: 1px solid #243041;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 1.25rem;
+      margin-bottom: 2rem;
+    }
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .brand-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.72rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .brand-badge span {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      box-shadow: 0 0 14px rgba(94, 184, 255, 0.65);
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(1.85rem, 4vw, 2.45rem);
+      font-weight: 750;
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+      background: linear-gradient(92deg, #fff 0%, #cfe4ff 40%, #d4c8ff 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .tagline {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+      max-width: 36rem;
+      line-height: 1.45;
+    }
+    .status-bar {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-      flex-wrap: wrap;
+      gap: 0.75rem;
+      padding: 0.55rem 0.9rem;
+      border-radius: 999px;
+      background: rgba(10, 14, 24, 0.55);
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow);
     }
-    h1 { font-size: 1.1rem; margin: 0; font-weight: 600; }
-    .sub { color: var(--muted); font-size: 0.85rem; }
-    main { padding: 1rem 1.25rem 2rem; max-width: 1200px; margin: 0 auto; }
+    .pill {
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 0.2rem 0.65rem;
+      border-radius: 999px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .pill.live { background: rgba(74, 222, 128, 0.14); color: var(--good); border: 1px solid rgba(74, 222, 128, 0.35); }
+    .pill.err { background: rgba(248, 113, 113, 0.12); color: var(--bad); border: 1px solid rgba(248, 113, 113, 0.35); }
+    .pill.wait { background: rgba(251, 191, 36, 0.1); color: var(--warn); border: 1px solid rgba(251, 191, 36, 0.3); }
+    .clock { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.88rem; }
+
     .grid {
       display: grid;
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       gap: 1rem;
     }
-    @media (min-width: 960px) {
-      .grid { grid-template-columns: 2fr 1fr; align-items: start; }
-    }
     .card {
-      background: var(--panel);
-      border: 1px solid #243041;
-      border-radius: 10px;
-      overflow: hidden;
-    }
-    .card h2 {
-      margin: 0;
-      padding: 0.65rem 1rem;
-      font-size: 0.95rem;
-      font-weight: 600;
-      border-bottom: 1px solid #243041;
-    }
-    .video-wrap {
       position: relative;
-      background: #000;
-      min-height: 240px;
+      overflow: hidden;
+      border-radius: var(--radius);
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+      padding: 1.1rem 1.15rem 1.15rem;
+      min-height: 132px;
     }
-    .video-wrap img {
-      display: block;
-      width: 100%;
-      height: auto;
-      max-height: 70vh;
-      object-fit: contain;
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: -1px;
+      background: radial-gradient(500px 120px at 10% 0%, rgba(94, 184, 255, 0.12), transparent 55%);
+      opacity: 0.9;
+      pointer-events: none;
     }
-    .banner {
-      padding: 0.75rem 1rem;
-      font-size: 0.9rem;
-      border-top: 1px solid #243041;
+    .card > * { position: relative; z-index: 1; }
+    .card h2 {
+      margin: 0 0 0.55rem;
+      font-size: 0.72rem;
+      font-weight: 650;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
       color: var(--muted);
     }
-    .banner.err { color: var(--err); }
-    .banner.warn { color: var(--warn); }
-    .stats { padding: 0.75rem 1rem 1rem; font-size: 0.9rem; }
-    dl {
-      display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 0.35rem 1rem;
-      margin: 0;
+    .metric {
+      font-size: 1.65rem;
+      font-weight: 750;
+      letter-spacing: -0.02em;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
     }
-    dt { color: var(--muted); }
-    dd { margin: 0; font-variant-numeric: tabular-nums; }
-    pre.raw {
-      margin: 0.75rem 0 0;
+    .sub {
+      margin-top: 0.35rem;
+      font-size: 0.82rem;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+    .bar {
+      margin-top: 0.65rem;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      overflow: hidden;
+    }
+    .bar > i {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      width: 0%;
+      transition: width 0.45s ease;
+    }
+    footer {
+      margin-top: 2.25rem;
+      color: var(--muted);
+      font-size: 0.8rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1.25rem;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      padding-top: 1.25rem;
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.78rem;
+      color: #c8d6ff;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 0.15rem 0.4rem;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .json-toggle {
+      margin-top: 1rem;
+      width: 100%;
+      text-align: left;
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--card-border);
+      color: var(--muted);
+      border-radius: 12px;
+      padding: 0.55rem 0.75rem;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .json-panel {
+      display: none;
+      margin-top: 0.5rem;
       padding: 0.75rem;
-      background: #0b0f14;
-      border-radius: 8px;
-      font-size: 0.75rem;
+      border-radius: 12px;
+      background: #05070c;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      color: #b8c7e8;
+      font-size: 0.72rem;
       overflow: auto;
       max-height: 220px;
-      color: #c8d6e5;
+      white-space: pre-wrap;
+      word-break: break-word;
     }
+    .json-panel.open { display: block; }
   </style>
 </head>
 <body>
-  <header>
-    <div>
-      <h1>Drone HMI</h1>
-      <div class="sub">Video (USB / V4L2) and host stats — <span id="clock"></span></div>
-    </div>
-  </header>
-  <main>
-    <div class="grid">
-      <section class="card">
-        <h2>Camera</h2>
-        <div class="video-wrap">
-          <img id="feed" src="/stream/" alt="Live feed" />
-        </div>
-        <div id="feed-msg" class="banner">Waiting for stream…</div>
-      </section>
-      <section class="card">
-        <h2>Host metrics</h2>
-        <div class="stats">
-          <dl id="stats-dl"></dl>
-          <pre id="stats-raw" class="raw" hidden></pre>
-        </div>
-      </section>
-    </div>
-  </main>
+  <div class="noise" aria-hidden="true"></div>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <div class="brand-badge"><span></span> Onboard systems</div>
+        <h1>Drone Bros Inc</h1>
+        <p class="tagline">Flight deck for Raspberry Pi telemetry — temperature, load, memory, uptime, and storage on one clean surface.</p>
+      </div>
+      <div class="status-bar" aria-live="polite">
+        <span id="pill" class="pill wait">Connecting</span>
+        <span class="clock" id="clock"></span>
+      </div>
+    </header>
+
+    <section class="grid" id="cards" aria-label="Host metrics"></section>
+
+    <button type="button" class="json-toggle" id="json-btn" hidden>Show raw JSON</button>
+    <pre class="json-panel" id="json-panel" aria-hidden="true"></pre>
+
+    <footer>
+      <span>Single port: HMI serves the page and proxies <code>/api/stats</code> to the stats container.</span>
+      <span>Updates every 2s</span>
+    </footer>
+  </div>
+
   <script>
-    const feed = document.getElementById("feed");
-    const feedMsg = document.getElementById("feed-msg");
-    const dl = document.getElementById("stats-dl");
-    const raw = document.getElementById("stats-raw");
+    const cards = document.getElementById("cards");
+    const pill = document.getElementById("pill");
     const clock = document.getElementById("clock");
+    const jsonBtn = document.getElementById("json-btn");
+    const jsonPanel = document.getElementById("json-panel");
+
+    jsonBtn.addEventListener("click", () => {
+      jsonPanel.classList.toggle("open");
+      jsonBtn.textContent = jsonPanel.classList.contains("open") ? "Hide raw JSON" : "Show raw JSON";
+    });
 
     function tickClock() {
       clock.textContent = new Date().toLocaleString();
@@ -135,14 +277,15 @@
     tickClock();
     setInterval(tickClock, 1000);
 
-    feed.addEventListener("load", () => {
-      feedMsg.textContent = "Stream connected.";
-      feedMsg.className = "banner";
-    });
-    feed.addEventListener("error", () => {
-      feedMsg.textContent = "Stream unavailable (camera unplugged, wrong format, or video container down). Try USE_TEST_PATTERN=1 for a test pattern.";
-      feedMsg.className = "banner err";
-    });
+    function setPill(state, text) {
+      pill.className = "pill " + state;
+      pill.textContent = text;
+    }
+
+    function bar(pct) {
+      const p = Math.max(0, Math.min(100, Number(pct) || 0));
+      return `<div class="bar" aria-hidden="true"><i style="width:${p}%"></i></div>`;
+    }
 
     function fmtUptime(sec) {
       if (sec == null || Number.isNaN(sec)) return "—";
@@ -152,60 +295,96 @@
       const m = Math.floor((s % 3600) / 60);
       const parts = [];
       if (d) parts.push(`${d}d`);
-      if (h || d) parts.push(`${h}h`);
+      parts.push(`${h}h`);
       parts.push(`${m}m`);
       return parts.join(" ");
     }
 
-    function renderStats(data) {
-      const rows = [];
-      const push = (k, v) => rows.push([k, v]);
-
-      push("Hostname", data.hostname ?? "—");
-      push("CPU temp", data.cpu_temp_c != null ? `${data.cpu_temp_c} °C` : "—");
-      const l = data.loadavg || {};
-      push("Load (1 / 5 / 15m)", [l["1m"], l["5m"], l["15m"]].every((x) => x != null)
-        ? `${l["1m"]} / ${l["5m"]} / ${l["15m"]}`
-        : "—");
+    function render(data) {
       const mem = data.memory || {};
-      push(
-        "Memory",
-        mem.mem_used_pct != null
-          ? `${mem.mem_used_pct}% used (${mem.mem_used_mb ?? "?"}/${mem.mem_total_mb ?? "?"} MB)`
-          : "—"
-      );
-      const up = data.uptime || {};
-      push("Uptime", fmtUptime(up.uptime_seconds));
+      const load = data.loadavg || {};
       const disk = data.disk_root || {};
-      push(
-        "Disk (/)",
-        disk.used_pct != null
-          ? `${disk.used_pct}% used (${disk.used_mb ?? "?"}/${disk.total_mb ?? "?"} MB)`
-          : disk.mounted === false ? "not mounted" : "—"
-      );
+      const up = data.uptime || {};
 
-      dl.innerHTML = rows
-        .map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`)
+      const memPct = mem.mem_used_pct ?? null;
+      const diskPct = disk.used_pct ?? null;
+
+      const items = [
+        {
+          title: "Hostname",
+          value: data.hostname ?? "—",
+          sub: "Kernel identity",
+        },
+        {
+          title: "CPU temperature",
+          value: data.cpu_temp_c != null ? `${data.cpu_temp_c} °C` : "—",
+          sub: "thermal_zone0",
+          extra: data.cpu_temp_c != null ? bar(Math.min(100, (data.cpu_temp_c / 85) * 100)) : "",
+        },
+        {
+          title: "Load average",
+          value: [load["1m"], load["5m"], load["15m"]].every((x) => x != null)
+            ? `${load["1m"]} · ${load["5m"]} · ${load["15m"]}`
+            : "—",
+          sub: "1 / 5 / 15 minute",
+        },
+        {
+          title: "Memory",
+          value: memPct != null ? `${memPct}% used` : "—",
+          sub: mem.mem_total_mb != null ? `${mem.mem_used_mb ?? "?"} / ${mem.mem_total_mb} MB` : "",
+          extra: memPct != null ? bar(memPct) : "",
+        },
+        {
+          title: "Uptime",
+          value: fmtUptime(up.uptime_seconds),
+          sub: "Since last boot",
+        },
+        {
+          title: "Disk (root)",
+          value: disk.used_pct != null ? `${disk.used_pct}% used` : disk.mounted === false ? "n/a" : "—",
+          sub: disk.total_mb != null ? `${disk.used_mb ?? "?"} / ${disk.total_mb} MB` : "",
+          extra: diskPct != null ? bar(diskPct) : "",
+        },
+      ];
+
+      cards.innerHTML = items
+        .map(
+          (c) => `
+        <article class="card">
+          <h2>${c.title}</h2>
+          <div class="metric">${c.value}</div>
+          ${c.sub ? `<div class="sub">${c.sub}</div>` : ""}
+          ${c.extra || ""}
+        </article>`
+        )
         .join("");
-      raw.textContent = JSON.stringify(data, null, 2);
+
+      jsonBtn.hidden = false;
+      jsonPanel.textContent = JSON.stringify(data, null, 2);
     }
 
-    async function pollStats() {
+    async function poll() {
       try {
         const res = await fetch("/api/stats", { cache: "no-store" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        renderStats(data);
-        raw.hidden = true;
+        render(data);
+        setPill("live", "Live");
       } catch (e) {
-        dl.innerHTML = `<dt>Stats</dt><dd class="err">Error: ${e.message}</dd>`;
-        raw.hidden = false;
-        raw.textContent = String(e);
+        cards.innerHTML = `
+          <article class="card" style="grid-column: 1 / -1">
+            <h2>Link</h2>
+            <div class="metric" style="font-size:1.1rem">Stats unreachable</div>
+            <div class="sub">${String(e.message || e)} — confirm the stats container is running and nginx can reach <code>stats:9101</code>.</div>
+          </article>`;
+        setPill("err", "Offline");
+        jsonBtn.hidden = true;
+        jsonPanel.classList.remove("open");
       }
     }
 
-    pollStats();
-    setInterval(pollStats, 2000);
+    poll();
+    setInterval(poll, 2000);
   </script>
 </body>
 </html>
