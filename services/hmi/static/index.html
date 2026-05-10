@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Drone Bros Inc — Flight Deck</title>
+  <title>drone DIY Build</title>
   <style>
     :root {
       color-scheme: dark;
@@ -324,9 +324,9 @@
   <div class="wrap">
     <header>
       <div class="brand">
-        <div class="brand-badge"><span></span> Onboard systems</div>
-        <h1>Drone Bros Inc</h1>
-        <p class="tagline">Flight deck for Raspberry Pi telemetry — temperature, load, memory, uptime, and storage on one clean surface.</p>
+        <div class="brand-badge"><span></span> DIY drone stack</div>
+        <h1>drone DIY Build</h1>
+        <p class="tagline">Local build telemetry for your Pi — temperature, load, memory, uptime, storage, compute, and network tools in one view.</p>
       </div>
       <div class="status-bar" aria-live="polite">
         <span id="pill" class="pill wait">Connecting</span>
@@ -603,11 +603,11 @@
     });
     document.getElementById("nf-dl-netplan").addEventListener("click", () => {
       updateNetGenerated();
-      downloadText("dronebros-netplan.yaml", document.getElementById("nf-netplan").value);
+      downloadText("drone-diy-build-netplan.yaml", document.getElementById("nf-netplan").value);
     });
     document.getElementById("nf-dl-dhcpcd").addEventListener("click", () => {
       updateNetGenerated();
-      downloadText("dronebros-dhcpcd-snippet.conf", document.getElementById("nf-dhcpcd").value);
+      downloadText("drone-diy-build-dhcpcd-snippet.conf", document.getElementById("nf-dhcpcd").value);
     });
 
     function render(data) {

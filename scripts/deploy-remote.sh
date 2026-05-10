@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
-# Minimal SSH deploy without Ansible: copies compose + seeds .env, then compose up.
-# Usage:
+# Minimal SSH deploy without Ansible: copies compose + seeds .env, then compose pull/up.
+# Prefer Ansible when installed: ./scripts/deploy-stack.sh 192.168.1.50 pi
+#
+# One-liner (from repo root, Git Bash / WSL / macOS / Linux):
 #   ./scripts/deploy-remote.sh --host 192.168.1.50 --user pi
-#   ./scripts/deploy-remote.sh -H pi.local -u pi --dir /opt/dronebros --skip-pull
+#   ./scripts/deploy-remote.sh 192.168.1.50 pi
+#
+# Offline Pi (images already loaded, no registry):
+#   ./scripts/deploy-remote.sh 192.168.1.50 pi --skip-pull
 
 set -euo pipefail
 
@@ -13,6 +18,12 @@ IDENTITY=""
 DIR="/opt/dronebros"
 SKIP_PULL="0"
 
+if [[ $# -ge 2 && "${1:-}" != -* ]]; then
+  HOST="$1"
+  USER="$2"
+  shift 2
+fi
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -H|--host) HOST="${2:?}"; shift 2 ;;
@@ -20,7 +31,7 @@ while [[ $# -gt 0 ]]; do
     -i|--identity) IDENTITY="${2:?}"; shift 2 ;;
     --dir) DIR="${2:?}"; shift 2 ;;
     --skip-pull) SKIP_PULL="1"; shift ;;
-    -h|--help) head -n 18 "$0"; exit 0 ;;
+    -h|--help) head -n 28 "$0"; exit 0 ;;
     *) echo "Unknown: $1" >&2; exit 2 ;;
   esac
 done
@@ -36,7 +47,7 @@ scp "${SSH_OPTS[@]}" "${ROOT}/.env.example" "${USER}@${HOST}:${DIR}/.env.example
 ssh "${SSH_OPTS[@]}" "${USER}@${HOST}" "test -f '${DIR}/.env' || cp '${DIR}/.env.example' '${DIR}/.env'"
 
 if [[ "$SKIP_PULL" == "1" ]]; then
-  ssh "${SSH_OPTS[@]}" "${USER}@${HOST}" "cd '${DIR}' && docker compose up -d"
+  ssh "${SSH_OPTS[@]}" "${USER}@${HOST}" "cd '${DIR}' && docker compose up -d && docker compose ps"
 else
-  ssh "${SSH_OPTS[@]}" "${USER}@${HOST}" "cd '${DIR}' && docker compose pull && docker compose up -d"
+  ssh "${SSH_OPTS[@]}" "${USER}@${HOST}" "cd '${DIR}' && docker compose pull && docker compose up -d && docker compose ps"
 fi

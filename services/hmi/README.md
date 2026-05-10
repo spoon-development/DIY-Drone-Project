@@ -1,6 +1,6 @@
 # services/hmi
 
-nginx + static assets. **Title in UI: Drone Bros Inc.**
+nginx + static assets. **Title in UI: drone DIY Build.**
 
 - Published port: **`HMI_HOST_PORT`** → container **80** (see root `docker-compose.yml`).
 - **`/api/stats`** → proxies to `stats:9101/metrics` (not exposed on the host).
