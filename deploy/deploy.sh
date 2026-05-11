@@ -8,8 +8,8 @@
 #   4) ssh docker load on each Pi
 #   5) ansible: compose file + .env on Pi, compose up (skip_image_pull true — no ghcr on Pi)
 #
-# Uses deploy/.venv/bin/ansible-playbook if present (run deploy/setup-venv.sh once),
-# otherwise ansible-playbook on your PATH.
+# Uses deploy/.venv/bin/ansible-playbook if you created deploy/.venv yourself, otherwise ansible-playbook on PATH
+# (install: sudo apt install ansible-core   or   pipx install ansible-core).
 #
 # Usage (from repo root):
 #   bash ./deploy/deploy.sh
@@ -216,7 +216,7 @@ _bundle_push_inventory_hosts() {
     exit 2
   }
   ansible_inv="$(_ansible_inv)" || {
-    echo "[deploy] ansible-inventory not found. Install Ansible or run: bash ./deploy/setup-venv.sh" >&2
+    echo "[deploy] ansible-inventory not found. Install: sudo apt install ansible-core  (or pipx install ansible-core)" >&2
     exit 2
   }
 
@@ -417,7 +417,7 @@ if [[ -x "${HERE}/.venv/bin/ansible-playbook" ]]; then
 elif command -v ansible-playbook >/dev/null 2>&1; then
   ANSIBLE_PLAYBOOK="ansible-playbook"
 else
-  echo "ansible-playbook not found. Run once:  bash ./deploy/setup-venv.sh" >&2
+  echo "ansible-playbook not found. Install: sudo apt install ansible-core  (or: cd deploy && python3 -m venv .venv && . .venv/bin/activate && pip install ansible-core)" >&2
   exit 2
 fi
 

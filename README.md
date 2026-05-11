@@ -33,7 +33,7 @@ A minimal Docker stack for **Raspberry Pi** (and similar ARM boards): a **stats*
 
 - **On the Pi:** Docker Engine + Compose plugin v2, user in `docker` group (or use `sudo` with Docker).
 - **64-bit OS** on the Pi (`aarch64`) is typical for Pi 5 / modern Ubuntu on Pi.
-- **On your laptop:** Docker for **`build/build.sh`** (local images) and **`build/push-images.sh`** (GHCR, after **`docker login ghcr.io`**). Ansible + SSH for **`deploy/deploy.sh`** (ship stack to the Pi). See **`deploy/setup-venv.sh`** for a local Ansible venv.
+- **On your laptop:** Docker for **`build/build.sh`** (local images) and **`build/push-images.sh`** (GHCR, after **`docker login ghcr.io`**). **Ansible** (`ansible-playbook` / **`ansible-inventory`** on your PATH, e.g. **`sudo apt install ansible-core`**) + SSH for **`deploy/deploy.sh`** (ship stack to the Pi).
 
 ## How the workflow splits
 
@@ -78,14 +78,11 @@ Compose variable defaults (`${IMAGE_REGISTRY:-…}`) work without a `.env` file 
 | **Push** | [`build/push-images.sh`](build/push-images.sh) | **buildx** push **`stats`** + **`hmi`** to GHCR (registry/tag from [`deploy/config/stack.yml`](deploy/config/stack.yml)). |
 | **Deploy** | [`deploy/`](deploy/) | Inventory, **`stack.yml`**, Ansible, **`deploy.sh`** only (no image build here). |
 
-`deploy/build.sh` remains a **thin wrapper** that forwards to **`build/build.sh`** so older docs/commands keep working.
-
 | Path | Purpose |
 |------|---------|
 | [`deploy/inventory/hosts.yml`](deploy/inventory/hosts.yml) | **Where** to deploy: `ansible_host`, `ansible_user`, optional `ansible_ssh_private_key_file`, optional **`dronebros_deploy_dir`** (default **`~/dronebros`**) |
-| [`deploy/config/stack.yml`](deploy/config/stack.yml) | **Which images**: `stack_image_registry`, `stack_image_tag`, `skip_image_pull`, optional `hmi_host_port` |
-| [`deploy/setup-venv.sh`](deploy/setup-venv.sh) | Create **`deploy/.venv`** and install **ansible-core** (recommended on Ubuntu/WSL) |
-| [`deploy/deploy.sh`](deploy/deploy.sh) | Local **pull/save/scp/load**, then Ansible: compose + **`.env`** + **up**; **`--pull-on-pi`** for Pi-side pull; **`--skip-bundle`** if images already on the Pi |
+| [`deploy/config/stack.yml`](deploy/config/stack.yml) | **Which images**: `stack_image_registry`, `stack_image_tag`, `skip_image_pull`, `stack_bundle_platform`, optional `hmi_host_port` |
+| [`deploy/deploy.sh`](deploy/deploy.sh) | Entry point: local **pull/save/scp/load**, then Ansible copies compose + **`.env`** and runs **compose up**; **`--pull-on-pi`** for Pi-side pull; **`--skip-bundle`** if images already on the Pi |
 | [`deploy/ansible/`](deploy/ansible/) | `ansible.cfg` + [`playbooks/deploy.yml`](deploy/ansible/playbooks/deploy.yml) |
 
 ### Path A — CI builds images (no `docker push` on your laptop)
@@ -128,20 +125,16 @@ This does **not** update the Pi by itself; use **`build/push-images.sh`** and **
 
 ### Deploy to hosts (Ansible)
 
-**One-time — virtualenv under `deploy/`** (avoids system `pip` / PEP 668 errors on Ubuntu and WSL):
+**One-time — Ansible on your laptop** (Ubuntu / WSL):
 
 ```bash
-# If venv fails with "ensurepip is not available" (common on minimal Ubuntu/WSL):
-sudo apt update && sudo apt install -y python3-venv
-
-cd /path/to/DIY-Drone-Project
-bash ./deploy/setup-venv.sh
+sudo apt update && sudo apt install -y ansible-core
+# or: pipx install ansible-core
 ```
 
-**Every deploy:**
+**Every deploy** (from repo root):
 
 ```bash
-cd /path/to/DIY-Drone-Project
 bash ./deploy/deploy.sh
 # One host:   bash ./deploy/deploy.sh --limit pi
 # Dry run:    bash ./deploy/deploy.sh --check
@@ -150,11 +143,11 @@ bash ./deploy/deploy.sh
 # Bundle only to explicit SSH:  bash ./deploy/deploy.sh -i ~/.ssh/key --ship 192.168.0.52 pi
 ```
 
-Each run **replaces** the prior stack on the Pi: **`docker compose down`** (with volumes), removes stray containers, **drops cached images** for your registry+tag (so **`:latest`** is not stale locally), **`docker compose pull`**, then **`docker compose up -d --force-recreate`**. Run this **after** CI has pushed new images (or the pull will re-fetch the same digest).
+Each run **replaces** the prior stack on the Pi: **`docker compose down`**, removes stray containers, then **`docker compose up -d --force-recreate`**. By default **`deploy.sh`** bundles images from your machine (no **`docker compose pull`** on the Pi). Use **`--pull-on-pi`** only when the Pi can reach GHCR.
 
-**Offline / air-gapped Pi:** default **`deploy.sh`** already avoids registry pulls on the Pi. If you pre-loaded images another way, use **`bash ./deploy/deploy.sh --skip-bundle`**. **`--pull-on-pi`** is only for when the Pi can reach GHCR.
+**Offline / air-gapped Pi:** default **`deploy.sh`** already avoids registry pulls on the Pi. If you pre-loaded images another way, use **`bash ./deploy/deploy.sh --skip-bundle`**.
 
-If `deploy/.venv` is missing, `deploy.sh` falls back to **`ansible-playbook` on your PATH** (e.g. `apt install ansible-core` or `pipx install ansible-core`).
+Optional: create **`deploy/.venv`** yourself and `pip install ansible-core`; **`deploy.sh`** uses **`deploy/.venv/bin/ansible-playbook`** when that path exists.
 
 Ansible copies [`docker-compose.yml`](docker-compose.yml) and writes **`.env`** on the target from [`deploy/config/stack.yml`](deploy/config/stack.yml):
 
@@ -238,9 +231,7 @@ docker compose down
 │   ├── build.sh
 │   └── push-images.sh
 ├── deploy/
-│   ├── build.sh              # forwards to ../build/build.sh
-│   ├── setup-venv.sh
-│   ├── deploy.sh
+│   ├── deploy.sh             # entry: bundle images + ansible to Pi
 │   ├── config/stack.yml
 │   ├── inventory/hosts.yml
 │   └── ansible/              # ansible.cfg + playbooks/deploy.yml
