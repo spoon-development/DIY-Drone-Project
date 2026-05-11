@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>DIY drone stack</title>
+  <title>HMI</title>
   <style>
     :root {
       color-scheme: dark;
@@ -29,6 +29,8 @@
       font-family: var(--font);
       color: var(--text);
       background-color: var(--bg0);
+      --user-bg-image: none;
+      --bg-overlay-opacity: 0.68;
       background-image:
         url("images/flight-bg.svg"),
         radial-gradient(1200px 600px at 15% -10%, rgba(94, 184, 255, 0.16), transparent 55%),
@@ -39,6 +41,22 @@
       background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
       background-attachment: fixed, scroll, scroll, scroll;
       min-height: 100vh;
+    }
+    body.has-custom-bg {
+      background-image:
+        linear-gradient(
+          165deg,
+          rgba(5, 8, 14, var(--bg-overlay-opacity)),
+          rgba(8, 12, 22, calc(var(--bg-overlay-opacity) - 0.12))
+        ),
+        var(--user-bg-image),
+        radial-gradient(1200px 600px at 15% -10%, rgba(94, 184, 255, 0.12), transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, rgba(157, 125, 255, 0.1), transparent 50%),
+        linear-gradient(165deg, var(--bg0), var(--bg1) 55%, #0a0f18);
+      background-size: auto, cover, auto, auto, auto;
+      background-position: 0 0, center center, 0 0, 0 0, 0 0;
+      background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+      background-attachment: fixed, fixed, scroll, scroll, scroll;
     }
     .noise {
       pointer-events: none;
@@ -90,24 +108,6 @@
     .brand-badge .badge-host {
       letter-spacing: 0.14em;
     }
-    h1 {
-      margin: 0;
-      font-size: clamp(1.85rem, 4vw, 2.45rem);
-      font-weight: 750;
-      letter-spacing: -0.03em;
-      line-height: 1.05;
-      background: linear-gradient(92deg, #fff 0%, #cfe4ff 40%, #d4c8ff 100%);
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-    }
-    .tagline {
-      margin: 0;
-      color: var(--muted);
-      font-size: 0.95rem;
-      max-width: 36rem;
-      line-height: 1.45;
-    }
     .status-bar {
       display: flex;
       align-items: center;
@@ -130,6 +130,12 @@
     .pill.live { background: rgba(74, 222, 128, 0.14); color: var(--good); border: 1px solid rgba(74, 222, 128, 0.35); }
     .pill.err { background: rgba(248, 113, 113, 0.12); color: var(--bad); border: 1px solid rgba(248, 113, 113, 0.35); }
     .pill.wait { background: rgba(251, 191, 36, 0.1); color: var(--warn); border: 1px solid rgba(251, 191, 36, 0.3); }
+    /* Pill reflects the HMI → stats feed; network Apply is gated on “live” so we don’t guess the iface. */
+    .pill.degraded { background: rgba(251, 191, 36, 0.12); color: #fcd34d; border: 1px solid rgba(251, 191, 36, 0.38); }
+    article.network-gated .net-grid {
+      opacity: 0.55;
+      pointer-events: none;
+    }
     .clock { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.88rem; }
 
     .grid {
@@ -195,52 +201,24 @@
     }
     footer {
       margin-top: 2.25rem;
-      color: var(--muted);
-      font-size: 0.8rem;
       display: flex;
-      flex-wrap: wrap;
-      gap: 0.75rem 1.25rem;
-      justify-content: space-between;
+      flex-direction: column;
       align-items: center;
+      gap: 0.35rem;
       border-top: 1px solid rgba(255, 255, 255, 0.06);
       padding-top: 1.25rem;
     }
-    code {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 0.78rem;
-      color: #c8d6ff;
-      background: rgba(0, 0, 0, 0.25);
-      padding: 0.15rem 0.4rem;
-      border-radius: 6px;
-      border: 1px solid rgba(255, 255, 255, 0.06);
-    }
-    .json-toggle {
-      margin-top: 1rem;
-      width: 100%;
-      text-align: left;
-      background: rgba(0, 0, 0, 0.2);
-      border: 1px solid var(--card-border);
-      color: var(--muted);
-      border-radius: 12px;
-      padding: 0.55rem 0.75rem;
-      font-size: 0.8rem;
-      cursor: pointer;
-    }
-    .json-panel {
-      display: none;
-      margin-top: 0.5rem;
-      padding: 0.75rem;
-      border-radius: 12px;
-      background: #05070c;
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      color: #b8c7e8;
+    .footer-note {
       font-size: 0.72rem;
-      overflow: auto;
-      max-height: 220px;
-      white-space: pre-wrap;
-      word-break: break-word;
+      color: var(--muted);
+      opacity: 0.75;
     }
-    .json-panel.open { display: block; }
+    .footer-copy {
+      font-size: 0.62rem;
+      color: var(--muted);
+      opacity: 0.5;
+      letter-spacing: 0.04em;
+    }
     .header-btn {
       background: rgba(94, 184, 255, 0.12);
       border: 1px solid rgba(94, 184, 255, 0.35);
@@ -322,71 +300,98 @@
       background: rgba(94, 184, 255, 0.14);
       color: var(--accent);
     }
+    .dlg-actions button.network-apply--working {
+      border-color: rgba(251, 191, 36, 0.55);
+      background: rgba(251, 191, 36, 0.12);
+      color: var(--warn);
+      cursor: wait;
+    }
+    .dlg-actions button.network-apply--done {
+      border-color: rgba(74, 222, 128, 0.55);
+      background: rgba(74, 222, 128, 0.14);
+      color: var(--good);
+      cursor: default;
+    }
+    .dlg-actions button.network-apply--error {
+      border-color: rgba(248, 113, 113, 0.55);
+      background: rgba(248, 113, 113, 0.1);
+      color: var(--bad);
+    }
     .dlg-hr {
       margin: 1rem 0 0.75rem;
       border: none;
       border-top: 1px solid rgba(255, 255, 255, 0.06);
     }
-    .hero-roll {
-      position: relative;
-      height: 132px;
-      border-radius: var(--radius);
+    .bg-preview-wrap {
+      margin: 0.75rem 0 0.5rem;
+      border-radius: 12px;
       overflow: hidden;
-      margin: 0 0 1.5rem;
       border: 1px solid var(--card-border);
-      box-shadow: var(--shadow);
-      background: rgba(10, 14, 24, 0.35);
-    }
-    .hero-roll .slide {
-      position: absolute;
-      inset: 0;
-      opacity: 0;
-      animation: heroFade 12s infinite ease-in-out;
+      aspect-ratio: 16 / 9;
+      max-height: 200px;
+      background: rgba(0, 0, 0, 0.35);
       display: flex;
-      align-items: flex-end;
-      padding: 1rem 1.15rem;
-      background-size: 180% 180%;
+      align-items: center;
+      justify-content: center;
     }
-    .hero-roll .slide:nth-child(1) {
-      animation-delay: 0s;
-      background-image:
-        radial-gradient(ellipse 80% 120% at 20% 20%, rgba(94, 184, 255, 0.35), transparent 55%),
-        radial-gradient(ellipse 70% 90% at 90% 10%, rgba(157, 125, 255, 0.28), transparent 50%),
-        linear-gradient(145deg, #0d1528, #0a0e18);
+    .bg-preview-wrap img {
+      max-width: 100%;
+      max-height: 200px;
+      object-fit: contain;
+      display: none;
     }
-    .hero-roll .slide:nth-child(2) {
-      animation-delay: 4s;
-      background-image:
-        radial-gradient(ellipse 90% 100% at 70% 80%, rgba(74, 222, 128, 0.18), transparent 55%),
-        radial-gradient(ellipse 60% 80% at 10% 60%, rgba(94, 184, 255, 0.22), transparent 50%),
-        linear-gradient(155deg, #101828, #0b0f16);
-    }
-    .hero-roll .slide:nth-child(3) {
-      animation-delay: 8s;
-      background-image:
-        radial-gradient(ellipse 100% 90% at 50% 0%, rgba(251, 191, 36, 0.12), transparent 45%),
-        radial-gradient(ellipse 80% 70% at 0% 100%, rgba(157, 125, 255, 0.2), transparent 55%),
-        linear-gradient(165deg, #0c1220, #080c14);
-    }
-    .hero-roll .slide strong {
-      font-size: 1.05rem;
-      font-weight: 750;
-      letter-spacing: -0.02em;
-      text-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
-    }
-    .hero-roll .slide span {
+    .bg-preview-wrap.has-img img {
       display: block;
-      margin-top: 0.2rem;
-      font-size: 0.78rem;
-      color: rgba(238, 243, 255, 0.72);
-      font-weight: 500;
     }
-    @keyframes heroFade {
-      0% { opacity: 0; }
-      4% { opacity: 1; }
-      30% { opacity: 1; }
-      34% { opacity: 0; }
-      100% { opacity: 0; }
+    .bg-preview-placeholder {
+      color: var(--muted);
+      font-size: 0.82rem;
+      padding: 1rem;
+      text-align: center;
+    }
+    .bg-preview-wrap.has-img .bg-preview-placeholder {
+      display: none;
+    }
+    input[type="range"].bg-dim {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+    .app-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin: 0 0 1.35rem;
+      align-items: center;
+    }
+    .tab-btn[aria-selected="true"] {
+      background: rgba(94, 184, 255, 0.22);
+      border-color: rgba(94, 184, 255, 0.55);
+      color: #bfe6ff;
+    }
+    .tab-panel[hidden] {
+      display: none !important;
+    }
+    .home-blank {
+      min-height: min(52vh, 420px);
+    }
+    .settings-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .settings-card h2 {
+      margin: 0 0 0.55rem;
+      font-size: 0.72rem;
+      font-weight: 650;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .settings-hint {
+      margin: 0 0 0.75rem;
+      font-size: 0.82rem;
+      color: var(--muted);
+      line-height: 1.45;
     }
   </style>
 </head>
@@ -395,108 +400,450 @@
   <div class="wrap">
     <header>
       <div class="brand">
-        <div class="brand-badge"><span class="dot" aria-hidden="true"></span> <span id="badge-host" class="badge-host">DIY drone stack</span></div>
-        <h1 id="page-title">DIY drone stack</h1>
-        <p class="tagline">Live telemetry for this host — swap the SVG in <code>static/images/</code> anytime for your own art.</p>
+        <div class="brand-badge"><span class="dot" aria-hidden="true"></span> <span id="badge-host" class="badge-host">HMI</span></div>
       </div>
       <div class="status-bar" aria-live="polite">
         <span id="pill" class="pill wait">Connecting</span>
         <span class="compute-chip" id="compute-chip" hidden></span>
-        <button type="button" class="header-btn" id="net-open">Network…</button>
         <span class="clock" id="clock"></span>
       </div>
     </header>
 
-    <section class="hero-roll" aria-label="Highlights">
-      <div class="slide">
-        <div>
-          <strong>Field telemetry</strong>
-          <span>Host metrics streamed every two seconds</span>
-        </div>
-      </div>
-      <div class="slide">
-        <div>
-          <strong>Build &amp; fly</strong>
-          <span>One port in the browser — same origin for UI and API</span>
-        </div>
-      </div>
-      <div class="slide">
-        <div>
-          <strong>Your network, your rules</strong>
-          <span>Static IPv4 snippets you apply with sudo on the Pi</span>
-        </div>
+    <nav class="app-tabs" role="tablist" aria-label="Views">
+      <button type="button" class="header-btn tab-btn" role="tab" id="tab-home" aria-selected="true" aria-controls="panel-home" data-tab="home">Home</button>
+      <button type="button" class="header-btn tab-btn" role="tab" id="tab-status" aria-selected="false" aria-controls="panel-status" data-tab="status">Status</button>
+      <button type="button" class="header-btn tab-btn" role="tab" id="tab-video" aria-selected="false" aria-controls="panel-video" data-tab="video">Video</button>
+      <button type="button" class="header-btn tab-btn" role="tab" id="tab-flight-controller" aria-selected="false" aria-controls="panel-flight-controller" data-tab="flight-controller">Flight Controller</button>
+      <button type="button" class="header-btn tab-btn" role="tab" id="tab-settings" aria-selected="false" aria-controls="panel-settings" data-tab="settings">Settings</button>
+    </nav>
+
+    <section id="panel-home" class="tab-panel" role="tabpanel" aria-labelledby="tab-home">
+      <div class="home-blank" aria-hidden="true"></div>
+    </section>
+
+    <section id="panel-status" class="tab-panel" role="tabpanel" aria-labelledby="tab-status" hidden>
+      <div class="grid" id="status-cards" aria-label="Host status and metrics"></div>
+    </section>
+
+    <section id="panel-video" class="tab-panel" role="tabpanel" aria-labelledby="tab-video" hidden>
+      <article class="card" style="max-width: 28rem">
+        <h2>Video</h2>
+        <div class="metric" style="font-size: 1.05rem">No video stream connected yet.</div>
+      </article>
+    </section>
+
+    <section id="panel-flight-controller" class="tab-panel" role="tabpanel" aria-labelledby="tab-flight-controller" hidden>
+      <article class="card" style="max-width: 28rem">
+        <h2>Flight Controller</h2>
+        <div class="metric" style="font-size: 1.05rem">No flight controller connected yet.</div>
+      </article>
+    </section>
+
+    <section id="panel-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-settings" hidden>
+      <div class="settings-stack">
+        <article class="card settings-card" id="network-settings-card">
+          <h2>Network</h2>
+          <p class="settings-hint" id="network-gate-msg" hidden></p>
+          <p class="settings-hint" id="nf-iface-note">—</p>
+          <div class="net-grid two">
+            <div class="field">
+              <label for="nf-ip">IP address</label>
+              <input id="nf-ip" type="text" inputmode="numeric" autocomplete="off" placeholder="192.168.1.50" />
+            </div>
+            <div class="field">
+              <label for="nf-netmask">Netmask</label>
+              <input id="nf-netmask" type="text" inputmode="numeric" autocomplete="off" placeholder="255.255.255.0" />
+            </div>
+            <div class="field" style="grid-column: 1 / -1">
+              <label for="nf-gw">Gateway</label>
+              <input id="nf-gw" type="text" inputmode="numeric" autocomplete="off" placeholder="192.168.1.1" />
+            </div>
+            <div id="nf-wifi-extra" class="net-grid two" style="grid-column: 1 / -1" hidden>
+              <div class="field" style="grid-column: 1 / -1">
+                <label for="nf-wifi-ssid">Wi-Fi name</label>
+                <input id="nf-wifi-ssid" type="text" autocomplete="off" placeholder="Your network name" />
+              </div>
+              <div class="field" style="grid-column: 1 / -1">
+                <label for="nf-wifi-psk">Wi-Fi password</label>
+                <input id="nf-wifi-psk" type="password" autocomplete="off" placeholder="Password for static Wi-Fi IP" />
+              </div>
+            </div>
+          </div>
+          <p class="sub" id="network-apply-status" style="min-height: 1.35em; margin-top: 0.75rem" aria-live="polite"></p>
+          <div class="dlg-actions" style="margin-top: 0.35rem">
+            <button type="button" class="primary" id="network-apply">Apply network</button>
+            <button type="button" id="settings-copy-ssh">Copy steps</button>
+          </div>
+        </article>
+
+        <article class="card settings-card">
+          <h2>Appearance</h2>
+          <p class="settings-hint">Background image (optional). Large files may fail — try under ~8&nbsp;MB.</p>
+          <div class="field">
+            <label for="bg-file">Image file</label>
+            <input id="bg-file" type="file" accept="image/*" />
+          </div>
+          <div class="bg-preview-wrap" id="bg-preview-wrap" aria-live="polite">
+            <span class="bg-preview-placeholder" id="bg-preview-ph">No file selected</span>
+            <img id="bg-preview-img" alt="" />
+          </div>
+          <div class="field" style="margin-top: 0.75rem">
+            <label for="bg-dim">Dark overlay</label>
+            <input type="range" class="bg-dim" id="bg-dim" min="0.35" max="0.92" step="0.01" value="0.68" />
+          </div>
+          <p class="sub" id="appearance-apply-status" style="min-height: 1.35em; margin-top: 0.75rem" aria-live="polite"></p>
+          <div class="dlg-actions" style="margin-top: 0.35rem">
+            <button type="button" class="primary" id="appearance-apply">Save background</button>
+            <button type="button" id="bg-clear">Remove background</button>
+          </div>
+        </article>
+
+        <article class="card settings-card">
+          <h2>Notes</h2>
+          <p class="settings-hint">
+            Apply network writes netplan, applies it, then reboots the Pi shortly after so the stack and network settle the same as a power cycle. Wrong settings can drop SSH — use a console when testing. Copy steps is a manual fallback.
+          </p>
+        </article>
       </div>
     </section>
 
-    <section class="grid" id="cards" aria-label="Host metrics"></section>
-
-    <dialog id="net-dialog" class="net-dlg" aria-labelledby="net-dlg-title">
-      <div class="net-dlg-inner">
-        <h2 id="net-dlg-title">Network settings</h2>
-        <p class="dlg-lead">
-          Set a <strong>static IPv4</strong> here. We generate a small <strong>netplan</strong> snippet — copy or download it, then apply on the Pi with
-          <code>sudo</code> (and restart networking). Bad addresses can drop SSH; use a console or a maintenance window.
-        </p>
-
-        <p class="dlg-lead" id="nf-iface-note" style="margin-top: -0.35rem; font-size: 0.8rem"></p>
-
-        <div class="net-grid two">
-          <div class="field">
-            <label for="nf-ip">IP address</label>
-            <input id="nf-ip" type="text" inputmode="numeric" autocomplete="off" placeholder="192.168.1.50" />
-          </div>
-          <div class="field">
-            <label for="nf-netmask">Netmask</label>
-            <input id="nf-netmask" type="text" inputmode="numeric" autocomplete="off" placeholder="255.255.255.0" />
-          </div>
-          <div class="field" style="grid-column: 1 / -1">
-            <label for="nf-gw">Gateway</label>
-            <input id="nf-gw" type="text" inputmode="numeric" autocomplete="off" placeholder="192.168.1.1" />
-          </div>
-        </div>
-
-        <hr class="dlg-hr" />
-
-        <div class="field">
-          <label for="nf-netplan">Generated netplan (YAML)</label>
-          <textarea id="nf-netplan" class="code" readonly rows="12"></textarea>
-        </div>
-
-        <div class="dlg-actions">
-          <button type="button" class="primary" id="nf-copy-netplan">Copy netplan</button>
-          <button type="button" id="nf-dl-netplan">Download netplan.yaml</button>
-          <button type="button" id="net-close">Close</button>
-        </div>
-      </div>
-    </dialog>
-
-    <button type="button" class="json-toggle" id="json-btn" hidden>Show raw JSON</button>
-    <pre class="json-panel" id="json-panel" aria-hidden="true"></pre>
-
     <footer>
-      <span>Single port: HMI serves the page and proxies <code>/api/stats</code> to the stats container.</span>
-      <span>Updates every 2s</span>
+      <span class="footer-note">Readings refresh about every two seconds.</span>
+      <span class="footer-copy">© 2026 Austin Sponaugle</span>
     </footer>
   </div>
 
   <script>
-    const cards = document.getElementById("cards");
+    const statusCards = document.getElementById("status-cards");
     const pill = document.getElementById("pill");
     const clock = document.getElementById("clock");
-    const jsonBtn = document.getElementById("json-btn");
-    const jsonPanel = document.getElementById("json-panel");
     const computeChip = document.getElementById("compute-chip");
-    const netDialog = document.getElementById("net-dialog");
-    const netOpen = document.getElementById("net-open");
-    const netClose = document.getElementById("net-close");
 
     const LS_NET = "hmi_network_draft_v2";
+    const LS_BG = "hmi_user_background_v1";
+    const NETWORK_FIELD_IDS = ["nf-ip", "nf-netmask", "nf-gw", "nf-wifi-ssid", "nf-wifi-psk"];
     let lastMetrics = null;
+    /** Set on the Pi via DISPLAY_HOSTNAME in .env (Ansible runs `hostname` at deploy). */
+    let deployHostLabel = "";
     let netIfaceChosen = "eth0";
+    let pendingBgDataUrl = null;
+    let lastBgState = null;
 
-    jsonBtn.addEventListener("click", () => {
-      jsonPanel.classList.toggle("open");
-      jsonBtn.textContent = jsonPanel.classList.contains("open") ? "Hide raw JSON" : "Show raw JSON";
+    const bgFile = document.getElementById("bg-file");
+    const bgPreviewWrap = document.getElementById("bg-preview-wrap");
+    const bgPreviewImg = document.getElementById("bg-preview-img");
+    const bgClear = document.getElementById("bg-clear");
+    const bgDim = document.getElementById("bg-dim");
+    const networkApply = document.getElementById("network-apply");
+    const networkApplyStatus = document.getElementById("network-apply-status");
+    const appearanceApply = document.getElementById("appearance-apply");
+    const appearanceApplyStatus = document.getElementById("appearance-apply-status");
+    const settingsCopySsh = document.getElementById("settings-copy-ssh");
+
+    async function postSettingsMerge(patch) {
+      const res = await fetch("/api/hmi-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(t || `HTTP ${res.status}`);
+      }
+      return res.json();
+    }
+
+    async function postApplyNetworkHost() {
+      const res = await fetch("/api/apply-network", { method: "POST" });
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || text || `HTTP ${res.status}`);
+      }
+      return data;
+    }
+
+    function loadBgFromStorage() {
+      try {
+        const raw = localStorage.getItem(LS_BG);
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    }
+
+    function applyBgToBody(dataUrl, overlayOpacity) {
+      if (!dataUrl) return;
+      const o = Math.max(0.25, Math.min(0.95, Number(overlayOpacity) || 0.68));
+      document.body.classList.add("has-custom-bg");
+      document.body.style.setProperty("--user-bg-image", `url("${dataUrl}")`);
+      document.body.style.setProperty("--bg-overlay-opacity", String(o));
+    }
+
+    function clearBgFromBody() {
+      document.body.classList.remove("has-custom-bg");
+      document.body.style.removeProperty("--user-bg-image");
+      document.body.style.removeProperty("--bg-overlay-opacity");
+    }
+
+    function restoreBackgroundFromStorage() {
+      const s = loadBgFromStorage();
+      if (s && s.dataUrl) {
+        applyBgToBody(s.dataUrl, s.overlayOpacity);
+        if (bgDim) bgDim.value = String(s.overlayOpacity ?? 0.68);
+      }
+    }
+
+    function compressImageFile(file, maxSide, quality) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          let w = img.naturalWidth;
+          let h = img.naturalHeight;
+          if (!w || !h) {
+            reject(new Error("Invalid image"));
+            return;
+          }
+          if (w > maxSide || h > maxSide) {
+            if (w >= h) {
+              h = Math.round((h * maxSide) / w);
+              w = maxSide;
+            } else {
+              w = Math.round((w * maxSide) / h);
+              h = maxSide;
+            }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, w, h);
+          try {
+            resolve(canvas.toDataURL("image/jpeg", quality));
+          } catch (e) {
+            reject(e);
+          }
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error("Could not read image"));
+        };
+        img.src = url;
+      });
+    }
+
+    async function tryCompressForStorage(file) {
+      const attempts = [
+        { maxSide: 2200, q: 0.82 },
+        { maxSide: 1920, q: 0.78 },
+        { maxSide: 1600, q: 0.72 },
+        { maxSide: 1280, q: 0.68 },
+      ];
+      let lastErr = null;
+      for (const { maxSide, q } of attempts) {
+        try {
+          const dataUrl = await compressImageFile(file, maxSide, q);
+          if (dataUrl.length < 4_500_000) return dataUrl;
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+      throw lastErr || new Error("Image stays too large after compression; try a smaller file.");
+    }
+
+    function resetBgDialogPreview() {
+      pendingBgDataUrl = null;
+      if (bgFile) bgFile.value = "";
+      if (bgPreviewImg) {
+        bgPreviewImg.src = "";
+        bgPreviewImg.removeAttribute("src");
+      }
+      if (bgPreviewWrap) bgPreviewWrap.classList.remove("has-img");
+    }
+
+    bgDim.addEventListener("input", () => {
+      const o = parseFloat(bgDim.value);
+      if (document.body.classList.contains("has-custom-bg")) {
+        const src = pendingBgDataUrl || (lastBgState && lastBgState.dataUrl);
+        if (src) document.body.style.setProperty("--bg-overlay-opacity", String(o));
+      }
+    });
+
+    bgFile.addEventListener("change", async () => {
+      const f = bgFile.files && bgFile.files[0];
+      if (!f) {
+        resetBgDialogPreview();
+        return;
+      }
+      try {
+        const dataUrl = await tryCompressForStorage(f);
+        pendingBgDataUrl = dataUrl;
+        bgPreviewImg.src = dataUrl;
+        bgPreviewWrap.classList.add("has-img");
+      } catch (e) {
+        alert(e.message || String(e));
+        resetBgDialogPreview();
+      }
+    });
+
+    function buildNetplanYaml() {
+      const f = collectNetForm();
+      const iface = f.iface || "eth0";
+      const prefix = netmaskToPrefix(f.netmask || "255.255.255.0");
+      const cidr =
+        f.ip && f.netmask ? `${f.ip}/${prefix}` : `${f.ip || "192.168.1.50"}/${prefix || 24}`;
+      const gw = f.gateway || "192.168.1.1";
+      const wireless = /^wl/.test(iface);
+      if (wireless) {
+        const ssid = (f.wifiSsid || "").trim();
+        const psk = (f.wifiPsk || "").trim();
+        const apKey = JSON.stringify(ssid || "YOUR_WIFI_NAME");
+        const apPass = JSON.stringify(psk || "YOUR_WIFI_PASSWORD");
+        return (
+          `# Network (from HMI)\n` +
+          `network:\n  version: 2\n  wifis:\n    ${iface}:\n      dhcp4: false\n` +
+          `      addresses:\n        - ${cidr}\n      routes:\n        - to: default\n          via: ${gw}\n` +
+          `      access-points:\n        ${apKey}:\n          password: ${apPass}\n`
+        );
+      }
+      return (
+        `# Network (from HMI)\n` +
+        `network:\n  version: 2\n  ethernets:\n    ${iface}:\n      dhcp4: false\n` +
+        `      addresses:\n        - ${cidr}\n      routes:\n        - to: default\n          via: ${gw}\n`
+      );
+    }
+
+    function buildSshApplyScript() {
+      return (
+        `BASE="\${DRONEBROS_DIR:-$HOME/dronebros}"\n` +
+        `sudo python3 <<PY\n` +
+        `import json, pathlib\n` +
+        `p = pathlib.Path("$BASE/hmi-data/hmi-settings.json")\n` +
+        `d = json.loads(p.read_text())\n` +
+        `pathlib.Path("/tmp/hmi-net.yaml").write_text(d.get("netplanYaml") or "")\n` +
+        `PY\n` +
+        `sudo install -m 600 /tmp/hmi-net.yaml /etc/netplan/99-drone-hmi.yaml\n` +
+        `sudo netplan apply\n` +
+        `sudo systemctl restart NetworkManager 2>/dev/null || true\n`
+      );
+    }
+
+    networkApply.addEventListener("click", async () => {
+      networkApplyStatus.textContent = "";
+      if (!metricsFeedLive()) {
+        networkApplyStatus.textContent = "Wait for live readings (status pill Live) before applying network.";
+        return;
+      }
+      const f = collectNetForm();
+      if (/^wl/.test(f.iface || "") && (!(f.wifiSsid || "").trim() || !(f.wifiPsk || "").trim())) {
+        networkApplyStatus.textContent = "Wi-Fi needs a network name and password for a static wireless IP.";
+        return;
+      }
+      const netplanYaml = buildNetplanYaml();
+      try {
+        localStorage.setItem(LS_NET, JSON.stringify(f));
+      } catch {
+        /* ignore */
+      }
+      setNetworkApplyButtonState("working");
+      try {
+        await postSettingsMerge({ networkDraft: f, netplanYaml });
+      } catch (e) {
+        setNetworkApplyButtonState("idle");
+        alert(e.message || String(e));
+        return;
+      }
+      try {
+        const applyResult = await postApplyNetworkHost();
+        setNetworkApplyButtonState("done");
+        if (applyResult.rebootScheduled === true) {
+          networkApplyStatus.textContent =
+            "Netplan applied. This Pi will reboot in a few seconds — the page will stop responding until it is back.";
+        } else if (applyResult.rebootScheduled === false) {
+          networkApplyStatus.textContent =
+            "Network saved and applied on this Pi (reboot after apply is turned off on the server).";
+        } else {
+          networkApplyStatus.textContent = "Network saved and applied on this Pi.";
+        }
+      } catch (e) {
+        setNetworkApplyButtonState("error");
+        networkApplyStatus.textContent =
+          "Settings saved, but applying on the host failed: " + (e.message || String(e));
+      }
+    });
+
+    appearanceApply.addEventListener("click", async () => {
+      appearanceApplyStatus.textContent = "";
+      const overlayOpacity = parseFloat(bgDim.value) || 0.68;
+      const payload = {};
+      if (pendingBgDataUrl) {
+        payload.background = { dataUrl: pendingBgDataUrl, overlayOpacity };
+      } else if (lastBgState && lastBgState.dataUrl) {
+        const prevO = lastBgState.overlayOpacity ?? 0.68;
+        if (Math.abs(overlayOpacity - prevO) > 0.001) {
+          payload.background = {
+            dataUrl: lastBgState.dataUrl,
+            overlayOpacity,
+          };
+        }
+      }
+      if (!payload.background) {
+        appearanceApplyStatus.textContent = "No background changes to save.";
+        return;
+      }
+      try {
+        await postSettingsMerge(payload);
+        lastBgState = {
+          dataUrl: payload.background.dataUrl,
+          overlayOpacity: payload.background.overlayOpacity,
+        };
+        applyBgToBody(lastBgState.dataUrl, lastBgState.overlayOpacity);
+        pendingBgDataUrl = null;
+        try {
+          localStorage.removeItem(LS_BG);
+        } catch {
+          /* ignore */
+        }
+        appearanceApplyStatus.textContent = "Background saved on this Pi.";
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    });
+
+    settingsCopySsh.addEventListener("click", async () => {
+      const text = buildSshApplyScript();
+      try {
+        await navigator.clipboard.writeText(text);
+        networkApplyStatus.textContent = "Steps copied to clipboard.";
+      } catch {
+        prompt("Copy:", text);
+      }
+    });
+
+    bgClear.addEventListener("click", () => {
+      appearanceApplyStatus.textContent = "";
+      postSettingsMerge({ background: null })
+        .then(() => {
+          lastBgState = null;
+          try {
+            localStorage.removeItem(LS_BG);
+          } catch {
+            /* ignore */
+          }
+          clearBgFromBody();
+          resetBgDialogPreview();
+          if (bgDim) bgDim.value = "0.68";
+          appearanceApplyStatus.textContent = "Background removed.";
+        })
+        .catch((e) => alert(e.message || String(e)));
     });
 
     function tickClock() {
@@ -508,6 +855,92 @@
     function setPill(state, text) {
       pill.className = "pill " + state;
       pill.textContent = text;
+    }
+
+    function metricsFeedLive() {
+      return !!(lastMetrics && lastMetrics.network && typeof lastMetrics.network === "object");
+    }
+
+    function refreshNetworkGate() {
+      const ok = metricsFeedLive();
+      const msg = document.getElementById("network-gate-msg");
+      const applyBtn = document.getElementById("network-apply");
+      const card = document.getElementById("network-settings-card");
+      if (msg) {
+        if (ok) {
+          msg.setAttribute("hidden", "");
+          msg.textContent = "";
+        } else {
+          msg.removeAttribute("hidden");
+          msg.textContent =
+            "Live host readings are offline (status is not Live). Network fields and Apply network are disabled so we do not push netplan without a current interface and link state. Restore the stats service on the Pi, then try again. Copy steps still uses the last saved settings file on the Pi.";
+        }
+      }
+      if (applyBtn) {
+        if (ok) {
+          applyBtn.classList.remove("network-apply--working", "network-apply--done", "network-apply--error");
+          applyBtn.classList.add("primary");
+          applyBtn.textContent = "Apply network";
+          applyBtn.disabled = false;
+        } else {
+          applyBtn.disabled = true;
+        }
+      }
+      NETWORK_FIELD_IDS.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = !ok;
+      });
+      if (card) card.classList.toggle("network-gated", !ok);
+    }
+
+    function setNetworkApplyButtonState(phase) {
+      const btn = networkApply;
+      if (!btn) return;
+      btn.classList.remove("primary", "network-apply--working", "network-apply--done", "network-apply--error");
+      if (phase === "working") {
+        btn.disabled = true;
+        btn.classList.add("network-apply--working");
+        btn.textContent = "Applying…";
+      } else if (phase === "done") {
+        btn.disabled = true;
+        btn.classList.add("network-apply--done");
+        btn.textContent = "Applied — rebooting…";
+      } else if (phase === "error") {
+        btn.disabled = false;
+        btn.classList.add("primary", "network-apply--error");
+        btn.textContent = "Apply failed — retry";
+        window.setTimeout(() => {
+          if (!networkApply) return;
+          networkApply.classList.remove("network-apply--error");
+          networkApply.classList.add("primary");
+          networkApply.textContent = "Apply network";
+        }, 5000);
+      } else {
+        btn.disabled = false;
+        btn.classList.add("primary");
+        btn.textContent = "Apply network";
+      }
+    }
+
+    function applyBranding(hostnameFromStats) {
+      const fromStats = hostnameFromStats && String(hostnameFromStats).trim();
+      const host = fromStats || deployHostLabel.trim() || "";
+      const label = host || "HMI";
+      const badgeHost = document.getElementById("badge-host");
+      if (badgeHost) badgeHost.textContent = label.toUpperCase();
+      document.title = label;
+    }
+
+    async function initHostMeta() {
+      try {
+        const r = await fetch("/api/host-meta", { cache: "no-store" });
+        if (!r.ok) return;
+        const j = await r.json();
+        deployHostLabel = (j.displayHostname && String(j.displayHostname).trim()) || "";
+        applyBranding("");
+      } catch {
+        /* local dev: endpoint missing or blocked — keep defaults */
+      }
     }
 
     function escHtml(s) {
@@ -544,8 +977,12 @@
       }
     }
 
-    function saveNetDraft(obj) {
-      localStorage.setItem(LS_NET, JSON.stringify(obj));
+    function persistNetDraftLocal(obj) {
+      try {
+        localStorage.setItem(LS_NET, JSON.stringify(obj));
+      } catch {
+        /* ignore */
+      }
     }
 
     function netmaskToPrefix(nm) {
@@ -582,21 +1019,23 @@
         ip: document.getElementById("nf-ip").value.trim(),
         netmask: document.getElementById("nf-netmask").value.trim(),
         gateway: document.getElementById("nf-gw").value.trim(),
+        wifiSsid: document.getElementById("nf-wifi-ssid").value.trim(),
+        wifiPsk: document.getElementById("nf-wifi-psk").value,
       };
+    }
+
+    function syncWifiExtraVisibility() {
+      const wrap = document.getElementById("nf-wifi-extra");
+      const iface = netIfaceChosen || "eth0";
+      const show = /^wl/.test(iface);
+      if (!wrap) return;
+      if (show) wrap.removeAttribute("hidden");
+      else wrap.setAttribute("hidden", "");
     }
 
     function updateNetGenerated() {
       const f = collectNetForm();
-      saveNetDraft(f);
-      const netplanEl = document.getElementById("nf-netplan");
-      const iface = f.iface || "eth0";
-      const prefix = netmaskToPrefix(f.netmask || "255.255.255.0");
-      const cidr =
-        f.ip && f.netmask ? `${f.ip}/${prefix}` : `${f.ip || "192.168.1.50"}/${prefix || 24}`;
-      netplanEl.value =
-        `# Static IPv4 — merge into /etc/netplan on the Pi, then: sudo netplan apply\n` +
-        `network:\n  version: 2\n  ethernets:\n    ${iface}:\n      dhcp4: false\n` +
-        `      addresses:\n        - ${cidr}\n      routes:\n        - to: default\n          via: ${f.gateway || "192.168.1.1"}\n`;
+      persistNetDraftLocal(f);
     }
 
     function syncNetFormFromMetrics() {
@@ -604,11 +1043,18 @@
       const d = loadNetDraft();
       const legacy = d.prefix && !d.netmask ? prefixToNetmask(d.prefix) : "";
       if (!lastMetrics) {
-        if (note) note.textContent = "Live telemetry not loaded yet — using saved draft values.";
         netIfaceChosen = d.iface || "eth0";
+        if (note) {
+          let t = "Live readings are not in yet — using what you saved.";
+          if (/^wl/.test(netIfaceChosen)) t += " Add Wi-Fi name and password for a static wireless IP.";
+          note.textContent = t;
+        }
         document.getElementById("nf-ip").value = d.ip || "";
         document.getElementById("nf-netmask").value = d.netmask || legacy || "255.255.255.0";
         document.getElementById("nf-gw").value = d.gateway || "";
+        document.getElementById("nf-wifi-ssid").value = d.wifiSsid || "";
+        document.getElementById("nf-wifi-psk").value = d.wifiPsk || "";
+        syncWifiExtraVisibility();
         updateNetGenerated();
         return;
       }
@@ -616,48 +1062,37 @@
       const dr = net.default_route || {};
       netIfaceChosen = (dr.iface && String(dr.iface)) || d.iface || "eth0";
       if (note) {
-        note.textContent = `Using interface ${netIfaceChosen} (from the host default route).`;
+        let t = `Using ${netIfaceChosen} as the active interface.`;
+        if (/^wl/.test(netIfaceChosen)) t += " Add Wi-Fi name and password for a static wireless IP.";
+        note.textContent = t;
       }
       document.getElementById("nf-ip").value = d.ip || net.primary_ipv4_hint || "";
       document.getElementById("nf-netmask").value = d.netmask || legacy || "255.255.255.0";
       document.getElementById("nf-gw").value = d.gateway || dr.gateway || "";
+      document.getElementById("nf-wifi-ssid").value = d.wifiSsid || "";
+      document.getElementById("nf-wifi-psk").value = d.wifiPsk || "";
+      syncWifiExtraVisibility();
       updateNetGenerated();
     }
 
-    function downloadText(filename, text) {
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(a.href);
+    ["nf-ip", "nf-netmask", "nf-gw", "nf-wifi-ssid", "nf-wifi-psk"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener("input", updateNetGenerated);
+    });
+
+    function renderCards(items) {
+      return items
+        .map(
+          (c) => `
+        <article class="card">
+          <h2>${c.title}</h2>
+          ${c.noMetric ? "" : `<div class="metric">${escHtml(c.value)}</div>`}
+          ${c.sub ? `<div class="sub">${escHtml(c.sub)}</div>` : ""}
+          ${c.extra || ""}
+        </article>`
+        )
+        .join("");
     }
-
-    netOpen.addEventListener("click", () => {
-      syncNetFormFromMetrics();
-      if (netDialog && typeof netDialog.showModal === "function") netDialog.showModal();
-    });
-    netClose.addEventListener("click", () => {
-      if (netDialog) netDialog.close();
-    });
-
-    ["nf-ip", "nf-netmask", "nf-gw"].forEach((id) => {
-      document.getElementById(id).addEventListener("input", updateNetGenerated);
-    });
-
-    document.getElementById("nf-copy-netplan").addEventListener("click", async () => {
-      updateNetGenerated();
-      const t = document.getElementById("nf-netplan").value;
-      try {
-        await navigator.clipboard.writeText(t);
-      } catch {
-        document.getElementById("nf-netplan").select();
-        document.execCommand("copy");
-      }
-    });
-    document.getElementById("nf-dl-netplan").addEventListener("click", () => {
-      updateNetGenerated();
-      downloadText("drone-diy-build-netplan.yaml", document.getElementById("nf-netplan").value);
-    });
 
     function render(data) {
       const mem = data.memory || {};
@@ -671,12 +1106,7 @@
       const memPct = mem.mem_used_pct ?? null;
       const diskPct = disk.used_pct ?? null;
 
-      const host = (data.hostname && String(data.hostname).trim()) || "";
-      const titleEl = document.getElementById("page-title");
-      const badgeHost = document.getElementById("badge-host");
-      if (titleEl) titleEl.textContent = host || "DIY drone stack";
-      if (badgeHost) badgeHost.textContent = (host || "DIY drone stack").toUpperCase();
-      document.title = host ? `${host} · DIY stack` : "DIY drone stack";
+      applyBranding(data.hostname);
 
       if (computeChip) {
         const short = comp.label || comp.machine || "";
@@ -693,29 +1123,29 @@
         .filter(Boolean)
         .join(" ");
 
-      const items = [];
-
+      const statusItems = [];
       if (comp && (comp.label || comp.machine || comp.kind)) {
-        items.push({
-          title: "Compute",
+        statusItems.push({
+          title: "Compute profile",
           value: comp.label || comp.machine || "—",
-          sub: [comp.kind, comp.kernel, comp.machine].filter(Boolean).join(" · ") || "Host profile via /proc and devicetree",
+          sub:
+            [comp.kind, comp.kernel, comp.machine].filter(Boolean).join(" · ") ||
+            "This Raspberry Pi",
         });
       }
 
       if (net && (net.default_route || net.primary_ipv4_hint)) {
-        items.push({
+        statusItems.push({
           title: "Network",
           value: net.primary_ipv4_hint || "—",
-          sub: routeBits || "Default route from host /proc",
+          sub: routeBits || "This Pi",
         });
       }
-
-      items.push(
+      statusItems.push(
         {
           title: "CPU temperature",
           value: data.cpu_temp_c != null ? `${data.cpu_temp_c} °C` : "—",
-          sub: "thermal_zone0",
+          sub: "On-board sensor",
           extra: data.cpu_temp_c != null ? bar(Math.min(100, (data.cpu_temp_c / 85) * 100)) : "",
         },
         {
@@ -744,20 +1174,7 @@
         }
       );
 
-      cards.innerHTML = items
-        .map(
-          (c) => `
-        <article class="card">
-          <h2>${c.title}</h2>
-          <div class="metric">${escHtml(c.value)}</div>
-          ${c.sub ? `<div class="sub">${escHtml(c.sub)}</div>` : ""}
-          ${c.extra || ""}
-        </article>`
-        )
-        .join("");
-
-      jsonBtn.hidden = false;
-      jsonPanel.textContent = JSON.stringify(data, null, 2);
+      statusCards.innerHTML = renderCards(statusItems);
     }
 
     async function poll() {
@@ -768,25 +1185,106 @@
         lastMetrics = data;
         render(data);
         setPill("live", "Live");
-        if (netDialog && netDialog.open) syncNetFormFromMetrics();
+        syncNetFormFromMetrics();
+        refreshNetworkGate();
       } catch (e) {
-        const titleEl = document.getElementById("page-title");
-        if (titleEl) titleEl.textContent = "DIY drone stack";
-        document.title = "DIY drone stack";
-        cards.innerHTML = `
+        lastMetrics = null;
+        applyBranding("");
+        const errCard = `
           <article class="card" style="grid-column: 1 / -1">
-            <h2>Link</h2>
-            <div class="metric" style="font-size:1.1rem">Stats unreachable</div>
-            <div class="sub">${escHtml(String(e.message || e))} — confirm the stats container is running and nginx can reach <code>stats:9101</code>.</div>
+            <h2>Status</h2>
+            <div class="metric" style="font-size:1.1rem">Couldn’t load readings</div>
+            <div class="sub">This page is still open — only the live data feed failed. Try again in a moment, or restart the stack on the Pi if it keeps happening.</div>
           </article>`;
-        setPill("err", "Offline");
-        jsonBtn.hidden = true;
-        jsonPanel.classList.remove("open");
+        statusCards.innerHTML = errCard;
+        setPill("err", "Readings offline");
+        syncNetFormFromMetrics();
+        refreshNetworkGate();
       }
     }
 
-    poll();
-    setInterval(poll, 2000);
+    async function hydrateFromServer() {
+      let srv = {};
+      try {
+        const r = await fetch("/api/hmi-settings", { cache: "no-store" });
+        if (r.ok) srv = await r.json();
+      } catch {
+        srv = {};
+      }
+      const bg = srv.background;
+      if (bg && bg.dataUrl) {
+        lastBgState = { dataUrl: bg.dataUrl, overlayOpacity: bg.overlayOpacity ?? 0.68 };
+        applyBgToBody(bg.dataUrl, bg.overlayOpacity);
+        if (bgDim) bgDim.value = String(bg.overlayOpacity ?? 0.68);
+        pendingBgDataUrl = bg.dataUrl;
+        if (bgPreviewImg) {
+          bgPreviewImg.src = bg.dataUrl;
+          bgPreviewWrap.classList.add("has-img");
+        }
+      } else {
+        const s = loadBgFromStorage();
+        if (s && s.dataUrl) {
+          applyBgToBody(s.dataUrl, s.overlayOpacity);
+          if (bgDim) bgDim.value = String(s.overlayOpacity ?? 0.68);
+          lastBgState = { dataUrl: s.dataUrl, overlayOpacity: s.overlayOpacity ?? 0.68 };
+          try {
+            await postSettingsMerge({
+              background: { dataUrl: s.dataUrl, overlayOpacity: s.overlayOpacity ?? 0.68 },
+            });
+            localStorage.removeItem(LS_BG);
+          } catch {
+            /* keep local only if server save fails */
+          }
+        } else {
+          restoreBackgroundFromStorage();
+          const ls = loadBgFromStorage();
+          if (ls && ls.dataUrl) lastBgState = { dataUrl: ls.dataUrl, overlayOpacity: ls.overlayOpacity ?? 0.68 };
+        }
+      }
+      if (srv.networkDraft && typeof srv.networkDraft === "object") {
+        const cur = loadNetDraft();
+        try {
+          localStorage.setItem(LS_NET, JSON.stringify({ ...cur, ...srv.networkDraft }));
+        } catch {
+          /* ignore */
+        }
+      }
+      syncNetFormFromMetrics();
+      refreshNetworkGate();
+    }
+
+    function selectTab(name) {
+      document.querySelectorAll(".tab-btn").forEach((btn) => {
+        const on = btn.dataset.tab === name;
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      document.querySelectorAll(".tab-panel").forEach((p) => {
+        const id = p.id.replace("panel-", "");
+        if (id === name) p.removeAttribute("hidden");
+        else p.setAttribute("hidden", "");
+      });
+      if (name === "settings") {
+        syncNetFormFromMetrics();
+        refreshNetworkGate();
+        if (lastBgState && lastBgState.dataUrl) {
+          pendingBgDataUrl = lastBgState.dataUrl;
+          bgPreviewImg.src = lastBgState.dataUrl;
+          bgPreviewWrap.classList.add("has-img");
+          if (bgDim) bgDim.value = String(lastBgState.overlayOpacity ?? 0.68);
+        }
+      }
+    }
+
+    document.querySelectorAll(".tab-btn").forEach((btn) => {
+      btn.addEventListener("click", () => selectTab(btn.dataset.tab));
+    });
+
+    initHostMeta()
+      .then(() => hydrateFromServer())
+      .finally(() => {
+        poll();
+        setInterval(poll, 2000);
+      });
   </script>
 </body>
 </html>

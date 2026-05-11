@@ -2,8 +2,9 @@
 # Remote deploy: replace whatever was running with the current compose + images.
 # Invoked by bash ./deploy/deploy.sh
 #
-# On the target: compose down → remove stack containers → (optional) drop cached
-# images for this tag → pull → up --force-recreate. Offline: skip pull/rmi.
+# On the target: compose down (twice) → rm containers → optional registry pull → up --force-recreate.
+# Default: deploy.sh ships images to the Pi (skip_image_pull true); Pi never pulls GHCR.
+# Default deploy path: ~/dronebros (no sudo). Set dronebros_deploy_dir e.g. /opt/dronebros for a system path (needs sudo / -K).
 
 - name: Drone Bros Inc — deploy stats + HMI
   hosts: all
@@ -13,11 +14,46 @@
     skip_image_pull: false
     stack_reg: "{{ stack_image_registry | default('ghcr.io/spoon-development', true) }}"
     stack_tag: "{{ stack_image_tag | default('latest', true) }}"
+    deploy_use_become: "{{ deploy_dir | regex_search('^/(opt|srv)(/|$)') is not none }}"
   tasks:
-    - name: Ensure deploy directory
+    - name: Ensure deploy directory exists (no sudo; default ~/dronebros)
+      when: not (deploy_use_become | bool)
+      become: false
       ansible.builtin.file:
         path: "{{ deploy_dir }}"
         state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+
+    - name: Ensure deploy directory exists (with sudo; /opt or /srv)
+      when: deploy_use_become | bool
+      become: true
+      ansible.builtin.file:
+        path: "{{ deploy_dir }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+
+    - name: Ensure HMI settings directory (no sudo)
+      when: not (deploy_use_become | bool)
+      become: false
+      ansible.builtin.file:
+        path: "{{ deploy_dir }}/hmi-data"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+
+    - name: Ensure HMI settings directory (with sudo)
+      when: deploy_use_become | bool
+      become: true
+      ansible.builtin.file:
+        path: "{{ deploy_dir }}/hmi-data"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
         mode: "0755"
 
     - name: Install docker compose file
@@ -26,6 +62,11 @@
         dest: "{{ deploy_dir }}/docker-compose.yml"
         mode: "0644"
 
+    - name: Get host short name for HMI title (browser tab and header)
+      ansible.builtin.command: hostname
+      register: hmi_display_hostname_cmd
+      changed_when: false
+
     - name: Write .env from deploy/config/stack.yml
       ansible.builtin.copy:
         dest: "{{ deploy_dir }}/.env"
@@ -33,15 +74,25 @@
           IMAGE_REGISTRY={{ stack_reg }}
           IMAGE_TAG={{ stack_tag }}
           HMI_HOST_PORT={{ hmi_host_port | default(8080) }}
+          HMI_DATA_DIR={{ deploy_dir }}/hmi-data
+          DISPLAY_HOSTNAME={{ hmi_display_hostname_cmd.stdout | trim }}
         mode: "0644"
 
-    - name: Tear down previous stack (containers, project network, anonymous volumes)
+    - name: Compose teardown (containers, project network, compose-managed volumes)
       ansible.builtin.command: docker compose down --remove-orphans --volumes
       args:
         chdir: "{{ deploy_dir }}"
-      register: compose_down
+      register: compose_down1
       failed_when: false
-      changed_when: compose_down.rc == 0
+      changed_when: compose_down1.rc == 0
+
+    - name: Compose teardown again (clear stuck state / old project name)
+      ansible.builtin.command: docker compose down --remove-orphans --volumes
+      args:
+        chdir: "{{ deploy_dir }}"
+      register: compose_down2
+      failed_when: false
+      changed_when: compose_down2.rc == 0
 
     - name: Remove stack containers by name (cleanup if project name changed)
       ansible.builtin.shell: docker rm -f dronebros-stats dronebros-hmi 2>/dev/null || true
@@ -50,20 +101,15 @@
       changed_when: false
       failed_when: false
 
-    - name: Remove cached images for this registry/tag (force fresh pull)
+    - name: Pull images from registry (re-fetch tag; use policy when Compose supports it)
       ansible.builtin.shell: |
-        docker rmi "{{ stack_reg }}/dronebros-stats:{{ stack_tag }}" 2>/dev/null || true
-        docker rmi "{{ stack_reg }}/dronebros-hmi:{{ stack_tag }}" 2>/dev/null || true
-      args:
-        executable: /bin/bash
-      when: not (skip_image_pull | bool)
-      changed_when: false
-      failed_when: false
-
-    - name: Pull images from registry
-      ansible.builtin.command: docker compose pull
-      args:
-        chdir: "{{ deploy_dir }}"
+        set -e
+        cd "{{ deploy_dir }}"
+        if docker compose pull --help 2>&1 | grep -qF -- '--policy'; then
+          docker compose pull --policy always
+        else
+          docker compose pull
+        fi
       when: not (skip_image_pull | bool)
       register: compose_pull
       changed_when: false

@@ -1,11 +1,11 @@
 # Drone Bros Inc — stats + HMI only. One published port (HMI); stats API is internal.
 #
 # This file is what we copy to the Pi: image-only (GHCR), no ./services paths on the device.
-# Local builds use docker-compose.build.yml merged in — see deploy/build.sh.
+# Local builds use docker-compose.build.yml merged in — see build/build.sh.
 #
 # Vars: IMAGE_REGISTRY, IMAGE_TAG, HMI_HOST_PORT (defaults inline below; Ansible writes .env from deploy/config/stack.yml).
 #
-# Offline: docker load on the Pi, set skip_image_pull: true in deploy/config/stack.yml, then bash ./deploy/deploy.sh.
+# Offline Pi: default deploy.sh pulls on your machine, scp + docker load on the Pi (see deploy/deploy.sh). Use --pull-on-pi only if the Pi can reach the registry.
 
 name: dronebros
 
@@ -14,6 +14,18 @@ services:
     image: ${IMAGE_REGISTRY:-ghcr.io/spoon-development}/dronebros-stats:${IMAGE_TAG:-latest}
     container_name: dronebros-stats
     restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9101/health', timeout=3).read()",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
     networks:
       - dronebros
     logging: &log
@@ -34,10 +46,22 @@ services:
     image: ${IMAGE_REGISTRY:-ghcr.io/spoon-development}/dronebros-hmi:${IMAGE_TAG:-latest}
     container_name: dronebros-hmi
     restart: unless-stopped
+    # See host netplan + run netplan apply in the host namespace (nsenter -t 1 …).
+    pid: host
+    privileged: true
     ports:
       - "${HMI_HOST_PORT:-8080}:80"
+    volumes:
+      - ${HMI_DATA_DIR:-./hmi-data}:/data
+      - /etc/netplan:/etc/netplan:rw
+    environment:
+      # Browser title / header when stats is down (Ansible writes DISPLAY_HOSTNAME in .env).
+      DISPLAY_HOSTNAME: ${DISPLAY_HOSTNAME:-}
+      # Try service DNS name, then container_name (some Docker/Compose setups differ).
+      STATS_METRICS_URLS: http://stats:9101/metrics,http://dronebros-stats:9101/metrics
     depends_on:
-      - stats
+      stats:
+        condition: service_healthy
     networks:
       - dronebros
     logging:

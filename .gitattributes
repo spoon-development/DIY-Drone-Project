@@ -1,4 +1,6 @@
-# Shell scripts must stay LF (WSL/bash break on CRLF — e.g. "set: pipefail" errors).
-deploy/**/*.sh text eol=lf
-*.sh text eol=lf
+# Default: let Git normalize text. Shell scripts must stay LF (WSL/bash break on CRLF).
 * text=auto
+*.sh text eol=lf
+*.py text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf

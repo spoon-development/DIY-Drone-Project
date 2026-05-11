@@ -3,8 +3,13 @@
 stack_image_registry: ghcr.io/spoon-development
 stack_image_tag: latest
 
-# Set true when the Pi already has images loaded (e.g. docker load) and must not pull from a registry.
-skip_image_pull: false
+# CPU/OS of the Pi for deploy.sh bundle pulls (WSL/PC is usually amd64; without this, docker pull grabs amd64 and the Pi cannot run those images).
+# If `docker save` fails with "content digest … not found" on WSL, install skopeo:  sudo apt install -y skopeo  (deploy.sh uses it automatically).
+stack_bundle_platform: linux/arm64
+
+# Default deploy (./deploy/deploy.sh): images are pulled on your laptop, tarred, copied, and docker load on the Pi — the Pi never contacts the registry.
+# Set false only if you intentionally use ./deploy/deploy.sh --pull-on-pi (Pi must reach ghcr.io).
+skip_image_pull: true
 
 # Optional: published HMI port on the host (default 8080 if omitted).
 # hmi_host_port: 8080

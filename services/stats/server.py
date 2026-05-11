@@ -143,7 +143,21 @@ def _decode_route_ipv4(hex8: str) -> str | None:
         return None
 
 
-def default_ipv4_route() -> dict[str, Any]:
+def _is_virtual_iface(name: str) -> bool:
+    """Skip docker/bridge/tunnel ifaces when inferring the host LAN route."""
+    if not name or name == "lo":
+        return True
+    nl = name.lower()
+    if nl.startswith(("veth", "br-", "virbr", "docker", "lxc", "zt", "tun", "tap")):
+        return True
+    if nl in ("docker0", "cni0", "flannel.1", "cilium_host", "cilium_net"):
+        return True
+    return False
+
+
+def _default_routes_from_proc() -> list[dict[str, Any]]:
+    """All IPv4 default routes from the host routing table (may be several)."""
+    out: list[dict[str, Any]] = []
     for path in _proc_route_paths():
         text = _read(path)
         if not text:
@@ -155,13 +169,70 @@ def default_ipv4_route() -> dict[str, Any]:
             parts = line.split()
             if len(parts) < 8:
                 continue
-            iface, dest, gw, mask = parts[0], parts[1], parts[2], parts[7]
-            if dest == "00000000" and mask == "00000000":
-                g = _decode_route_ipv4(gw)
-                if g == "0.0.0.0":
-                    g = None
-                return {"iface": iface, "gateway": g, "source": path}
-    return {}
+            iface, dest, gw_raw, mask = parts[0], parts[1], parts[2], parts[7]
+            if dest != "00000000" or mask != "00000000":
+                continue
+            try:
+                metric = int(parts[6])
+            except (ValueError, IndexError):
+                metric = 1_000_000
+            g = _decode_route_ipv4(gw_raw)
+            if g == "0.0.0.0":
+                g = None
+            out.append({"iface": iface, "gateway": g, "metric": metric, "source": path})
+    return out
+
+
+def default_ipv4_route() -> dict[str, Any]:
+    """Pick lowest-metric default route, skipping obvious virtual ifaces when possible."""
+    candidates = _default_routes_from_proc()
+    if not candidates:
+        return {}
+    real = [c for c in candidates if not _is_virtual_iface(c["iface"])]
+    pool = real if real else candidates
+    pool.sort(key=lambda c: (c["metric"], c["iface"]))
+    best = pool[0]
+    return {
+        "iface": best["iface"],
+        "gateway": best["gateway"],
+        "metric": best["metric"],
+        "source": best["source"],
+    }
+
+
+def suggested_static_iface(route: dict[str, Any], ifaces: list[dict[str, Any]]) -> str:
+    """Prefer wired iface that looks up so static IP matches Ethernet, not only Wi-Fi default route."""
+    if not ifaces:
+        cand = str(route.get("iface") or "").strip()
+        return cand if cand and not _is_virtual_iface(cand) else "eth0"
+
+    def sort_key(x: dict[str, Any]) -> tuple[int, int, int, str]:
+        name = (x.get("name") or "").strip()
+        if not name or name == "lo" or _is_virtual_iface(name):
+            return (9, 9, 9, name)
+        carrier_ok = x.get("carrier") is True
+        up = (x.get("operstate") or "").lower() == "up"
+        stale = (x.get("operstate") or "").lower() == "unknown" and x.get("carrier") is None
+        link_score = 0 if (carrier_ok or up or stale) else 1
+        if re.match(r"^(en|end|eth|usb)", name, re.I):
+            medium = 0  # prefer Ethernet-like jacks for static LAN IP
+        elif name.startswith("wl"):
+            medium = 1
+        else:
+            medium = 2
+        return (link_score, medium, name)
+
+    phys = [x for x in ifaces if (x.get("name") or "").strip() not in ("", "lo")]
+    phys.sort(key=sort_key)
+    for x in phys:
+        name = (x.get("name") or "").strip()
+        if name == "lo" or _is_virtual_iface(name):
+            continue
+        return name
+    cand = str(route.get("iface") or "").strip()
+    if cand and not _is_virtual_iface(cand):
+        return cand
+    return "eth0"
 
 
 def _list_sysfs_net_ifaces() -> list[dict[str, Any]]:
@@ -293,6 +364,7 @@ def _grep_dhcpcd_hints() -> list[str]:
 
 def network_summary() -> dict[str, Any]:
     ifaces = _list_sysfs_net_ifaces()
+    all_defaults = _default_routes_from_proc()
     route = default_ipv4_route()
     netplan = _grep_netplan_hints()
     dhcpcd = _grep_dhcpcd_hints()
@@ -317,6 +389,8 @@ def network_summary() -> dict[str, Any]:
     return {
         "interfaces": ifaces,
         "default_route": route or None,
+        "default_routes": sorted(all_defaults, key=lambda c: (c["metric"], c["iface"]))[:12],
+        "static_iface_hint": suggested_static_iface(route or {}, ifaces),
         "config_hints": {"netplan": netplan, "dhcpcd": dhcpcd},
         "primary_ipv4_hint": primary,
     }
