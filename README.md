@@ -13,13 +13,13 @@ A minimal Docker stack for **Raspberry Pi** (and similar ARM boards): a **stats*
                      host port 8080
                             │
 ┌───────────────────────────▼─────────────────────────────┐
-│  dronebros-hmi (Python aiohttp)                          │
+│  dronebros-hmi (C++ / cpp-httplib)                       │
 │  /  → static UI   |   /api/stats → proxy to stats       │
 └───────────────────────────┬─────────────────────────────┘
                    Docker network (internal)
                             │
 ┌───────────────────────────▼─────────────────────────────┐
-│  dronebros-stats (Python)  :9101  (not published)        │
+│  dronebros-stats (C++)  :9101  (not published)           │
 │  mounts: /proc, /sys, / → read-only host metrics         │
 └─────────────────────────────────────────────────────────┘
 ```

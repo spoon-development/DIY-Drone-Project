@@ -724,12 +724,8 @@
     function buildSshApplyScript() {
       return (
         `BASE="\${DRONEBROS_DIR:-$HOME/dronebros}"\n` +
-        `sudo python3 <<PY\n` +
-        `import json, pathlib\n` +
-        `p = pathlib.Path("$BASE/hmi-data/hmi-settings.json")\n` +
-        `d = json.loads(p.read_text())\n` +
-        `pathlib.Path("/tmp/hmi-net.yaml").write_text(d.get("netplanYaml") or "")\n` +
-        `PY\n` +
+        `# Requires jq on the Pi host (apt install jq).\n` +
+        `sudo jq -r '.netplanYaml // empty' "$BASE/hmi-data/hmi-settings.json" > /tmp/hmi-net.yaml\n` +
         `sudo install -m 600 /tmp/hmi-net.yaml /etc/netplan/99-drone-hmi.yaml\n` +
         `sudo netplan apply\n` +
         `sudo systemctl restart NetworkManager 2>/dev/null || true\n`
