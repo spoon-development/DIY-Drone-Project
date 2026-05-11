@@ -35,13 +35,13 @@ A minimal Docker stack for **Raspberry Pi** (and similar ARM boards): a **stats*
 - **64-bit OS** on the Pi (`aarch64`) is typical for Pi 5 / modern Ubuntu on Pi.
 - **On your laptop:** Docker for **`build/build.sh`** (local images) and **`build/push-images.sh`** (GHCR, after **`docker login ghcr.io`**). **Ansible** (`ansible-playbook` / **`ansible-inventory`** on your PATH, e.g. **`sudo apt install ansible-core`**) + SSH for **`deploy/deploy.sh`** (ship stack to the Pi).
 
-## How the workflow splits
+## Build, push, deploy (local only)
 
 | Step | You use | What it does |
 |------|---------|--------------|
 | **Build** | **`bash ./build/build.sh`** (optional **`--arm`** for Pi / **`--amd`** for PC) | **`docker compose build`** for **`stats`** + **`hmi`**. |
 | **Push** | **`bash ./build/push-images.sh`** (optional **`--image multi`** / **`amd64`** / **`arm64`**) | **buildx** push to GHCR using **`deploy/config/stack.yml`** registry/tag (needs **buildx** + login). |
-| **Git** | *Your choice* | Commit and push source; **CI** can also build multi-arch images to GHCR. |
+| **Git** | *Your choice* | Commit and push source (backup / collaboration only — images reach GHCR via **`push-images.sh`**). |
 | **Deploy** | **`bash ./deploy/deploy.sh`** | Pull images **on your machine**, **save** tars, **scp** + **`docker load`** on the Pi, then Ansible: compose + **`.env`**, tear down, **up** (Pi does **not** pull GHCR by default). **`--pull-on-pi`** restores registry pull on the Pi; **`--skip-bundle`** if images are already loaded. |
 
 ## Standard process when you change code
@@ -59,13 +59,13 @@ Until step **4** finishes, the vehicle can still be running **old** images — t
 
 **Compose-only edits** (root **`docker-compose.yml`**, no new image): step **4** alone updates the file on the Pi, but the Pi still uses whatever images that compose references until you also run **3** (and **2** if you changed Dockerfiles).
 
-**Git**: commit and push whenever you want source backup or CI; it does **not** replace steps **3–4** for updating the Pi from your laptop.
+**Git**: commit and push whenever you want source backup; it does **not** replace steps **3–4** for updating the Pi from your laptop.
 
 **Deploy directory:** Ansible defaults to **`~/dronebros`** (**`/home/<user>/dronebros`**) so **no sudo** is needed to create the folder (same behavior as before the `/opt` experiment). To use **`/opt/dronebros`** instead, set **`dronebros_deploy_dir`** in inventory — then **`deploy.sh`** adds **`-b --ask-become-pass`** and you must enter the **sudo** password when prompted (use a real terminal). **`--ask-pass`** / **`-k`** is for **SSH** password login. **`--no-ask-become-pass`** skips the sudo prompt only when NOPASSWD is configured for that path.
 
 ## Why two `docker-compose` files?
 
-- **`docker-compose.yml`** — What runs on the **Pi** (and in CI): **pull images** from GHCR only. It must not list `build: context: ./services/...` because the Pi does not get your source tree.
+- **`docker-compose.yml`** — What runs on the **Pi**: **pull images** from GHCR only. It must not list `build: context: ./services/...` because the Pi does not get your source tree.
 - **`docker-compose.build.yml`** — **Extra** definitions for your **laptop**: `build` contexts under [`services/`](services/). **`build/build.sh`** merges both files so you can build and run locally without a registry.
 
 Compose variable defaults (`${IMAGE_REGISTRY:-…}`) work without a `.env` file on your machine. On the Pi, **`deploy/deploy.sh`** writes `.env` from **`deploy/config/stack.yml`** so the device matches the registry/tag you chose.
@@ -85,29 +85,15 @@ Compose variable defaults (`${IMAGE_REGISTRY:-…}`) work without a `.env` file 
 | [`deploy/deploy.sh`](deploy/deploy.sh) | Entry point: local **pull/save/scp/load**, then Ansible copies compose + **`.env`** and runs **compose up**; **`--pull-on-pi`** for Pi-side pull; **`--skip-bundle`** if images already on the Pi |
 | [`deploy/ansible/`](deploy/ansible/) | `ansible.cfg` + [`playbooks/deploy.yml`](deploy/ansible/playbooks/deploy.yml) |
 
-### Path A — CI builds images (no `docker push` on your laptop)
+### Publish images to GHCR (your machine)
 
-1. **Commit and push** your code to GitHub (branch **`main`** or **`feature/pi-docker-stack`**, or run the workflow manually — see below).
-2. Wait for **[Build and push images (GHCR)](.github/workflows/build-push-images.yml)** to finish green. It builds **linux/amd64** and **linux/arm64** and pushes:
-   - `ghcr.io/<repo-owner-lowercase>/dronebros-stats:latest`
-   - `ghcr.io/<repo-owner-lowercase>/dronebros-hmi:latest`  
-   (`<repo-owner-lowercase>` is the GitHub user or org that **owns the repository**, same as in the repo URL.)
-3. Set **`stack_image_registry`** in [`deploy/config/stack.yml`](deploy/config/stack.yml) to **`ghcr.io/<that same owner>`** (must match CI).
-4. From your PC: **`bash ./deploy/deploy.sh`** — your machine pulls the images, ships them to the Pi, and Ansible recreates the stack.
+1. **Once:** **`docker login ghcr.io`** — GitHub username + a **PAT** with **`write:packages`** (and **`read:packages`**). Image names must match **`stack_image_registry`** / **`stack_image_tag`** in **`deploy/config/stack.yml`** (typically **`ghcr.io/<repo-owner-lowercase>/...`**).
+2. **`bash ./build/build.sh`** then **`bash ./build/push-images.sh`** — **buildx**-pushes both images (default **multi-arch** so the Pi gets **arm64**). Use **`bash ./build/push-images.sh --image arm64`** for a single-arch push if you want.
+3. Deploy with **`bash ./deploy/deploy.sh`** (default: pull on your laptop, tarball, **`docker load`** on the Pi — no registry on the Pi).
 
-**Other branches:** add the branch under `on.push.branches` in the workflow file, or in GitHub go to **Actions → Build and push images (GHCR) → Run workflow**.
+**Private packages:** the Pi (or your laptop when pulling) needs **`docker login ghcr.io`** with **`read:packages`**, or make the GHCR package **Public**.
 
-**Pull on the Pi without login:** in the package’s **Settings** on GitHub, set visibility to **Public** (or keep private and run **`docker login ghcr.io`** once on the Pi with a PAT that has **`read:packages`**).
-
-### Path B — You build and push images from your dev machine (GHCR)
-
-Use this when you want registry images **without waiting for CI**.
-
-1. **Once:** **`docker login ghcr.io`** — GitHub username + a **PAT** with **`write:packages`** (and **`read:packages`**). Image names must match **`stack_image_registry`** / **`stack_image_tag`** in **`deploy/config/stack.yml`**.
-2. **`bash ./build/build.sh`** then **`bash ./build/push-images.sh`** — **buildx**-pushes both images (default **multi-arch** manifest so the Pi can pull **arm64**). Use **`bash ./build/push-images.sh --image arm64`** for a single-arch push if you want.
-3. Deploy the Pi with **`bash ./deploy/deploy.sh`** (default: bundle from your PC), or use Path C.
-
-### Path C — Bundle from your laptop: pull, tarball, load on Pi, then deploy
+### Bundle-only deploy (no `docker push` from you)
 
 On a machine with Docker + SSH to the Pi (e.g. a new laptop), from the repo root:
 
@@ -163,18 +149,6 @@ Optional: `ssh-copy-id user@<pi-ip>` once so Ansible does not prompt every time.
 
 Use **one WSL shell** for **Git over SSH** when your keys live in `~/.ssh` there. PowerShell on `C:\` can use a different agent layout. If `ssh -T git@github.com` works in WSL, use that same shell for `git push`.
 
-## CI — build & push (this is how images get to GHCR)
-
-Workflow: [`.github/workflows/build-push-images.yml`](.github/workflows/build-push-images.yml)
-
-- Runs on push to **`main`** or **`feature/pi-docker-stack`**, or **manually** (Actions tab).
-- Uses **`GITHUB_TOKEN`** to push to GHCR — **no personal `docker login` on your PC**.
-- Tags: **`ghcr.io/<repo-owner-lowercase>/dronebros-stats:latest`** and **`dronebros-hmi:latest`** (same owner as the GitHub repo).
-
-Match **`stack_image_registry`** in `deploy/config/stack.yml` to **`ghcr.io/<repo-owner-lowercase>`**.
-
-**Private packages on the Pi:** one-time **`docker login ghcr.io`** with a PAT with **`read:packages`**, or make the package **Public** to skip login.
-
 ## On the Pi (manual)
 
 In the directory with `docker-compose.yml` and `.env` (Ansible defaults to **`~/dronebros`**; override with **`dronebros_deploy_dir`** in inventory):
@@ -198,7 +172,7 @@ bash ./build/build.sh
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d
 ```
 
-Then open **http://localhost:8080** (or your `HMI_HOST_PORT`). For the Pi, use **`deploy/deploy.sh`** (bundles from your machine by default); publish images with **CI** or **`build/push-images.sh`** as you prefer.
+Then open **http://localhost:8080** (or your `HMI_HOST_PORT`). For the Pi, use **`deploy/deploy.sh`** (bundles from your machine by default); publish updated images with **`build/push-images.sh`** before deploy when you changed **`services/`** or Dockerfiles.
 
 ## Operations
 
@@ -214,7 +188,7 @@ docker compose down
 |---------|---------------|
 | Browser **ERR_ADDRESS_INVALID** for `0.0.0.0` | Use **`http://<pi-ip>:8080`**, not `0.0.0.0`. |
 | **denied** on `docker pull` | Private GHCR: `docker login ghcr.io` + PAT; or make packages public. |
-| **no matching manifest for linux/amd64** | Use multi-arch images from current CI, or `docker pull --platform linux/arm64`. |
+| **no matching manifest for linux/amd64** | Use a multi-arch push from **`push-images.sh`**, or `docker pull --platform linux/arm64`. |
 | **`bash\r`**, **`set: pipefail`**, or **`invalid option`** under WSL | Scripts have **CRLF** line endings. [`.gitattributes`](.gitattributes) forces **LF** for `*.sh`; re-save or run `sed -i 's/\r$//' deploy/*.sh` in WSL, then **`git add --renormalize deploy/*.sh`**. Always invoke with **`bash ./deploy/....sh`**. |
 | **permission denied** on Docker socket | `sudo usermod -aG docker $USER` then re-login; or use Docker Desktop WSL integration. |
 | HMI loads but stats show offline | `docker compose logs stats hmi`; ensure stats container has `/proc`, `/sys`, `/` mounts. |
@@ -238,7 +212,6 @@ docker compose down
 ├── services/
 │   ├── stats/
 │   └── hmi/
-└── .github/workflows/
 ```
 
 ## License / project
