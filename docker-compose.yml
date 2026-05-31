@@ -1,4 +1,4 @@
-# Drone Bros Inc — stats + HMI only. One published port (HMI); stats API is internal.
+# Optional cameras (V4L2): MIPI (Pi Camera Module 3) or USB (MJPEG). Enable profile `video` via COMPOSE_PROFILES (see stack.yml). Video container is privileged so missing camera nodes do not block compose up.
 #
 # This file is what we copy to the Pi: image-only (GHCR), no ./services paths on the device.
 # Local builds use docker-compose.build.yml merged in — see build/build.sh.
@@ -14,6 +14,8 @@ services:
     image: ${IMAGE_REGISTRY:-ghcr.io/spoon-development}/dronebros-stats:${IMAGE_TAG:-latest}
     container_name: dronebros-stats
     restart: unless-stopped
+    cap_add:
+      - SYS_ADMIN
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9101/health"]
       interval: 5s
@@ -36,6 +38,27 @@ services:
       HOST_SYS: /host/sys
       HOST_ROOT: /host_root
 
+  video:
+    profiles:
+      - video
+    image: ${IMAGE_REGISTRY:-ghcr.io/spoon-development}/dronebros-video:${IMAGE_TAG:-latest}
+    container_name: dronebros-video
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/host:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8765/health"]
+      interval: 15s
+      timeout: 6s
+      retries: 4
+      start_period: 20s
+    networks:
+      - dronebros
+    logging: *log
+    environment:
+      VIDEO_DEFAULT_PROFILE: ${VIDEO_DEFAULT_PROFILE:-uc60}
+
   hmi:
     image: ${IMAGE_REGISTRY:-ghcr.io/spoon-development}/dronebros-hmi:${IMAGE_TAG:-latest}
     container_name: dronebros-hmi
@@ -53,6 +76,9 @@ services:
       DISPLAY_HOSTNAME: ${DISPLAY_HOSTNAME:-}
       # Try service DNS name, then container_name (some Docker/Compose setups differ).
       STATS_METRICS_URLS: http://stats:9101/metrics,http://dronebros-stats:9101/metrics
+      VIDEO_SERVICE_URL: http://video:8765
+      # Network apply runs netplan on the host; do not reboot — keeps HMI reachable over Wi-Fi.
+      HMI_REBOOT_AFTER_NETPLAN: "0"
     depends_on:
       stats:
         condition: service_healthy

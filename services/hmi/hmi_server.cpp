@@ -2,13 +2,19 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <fstream>
 #include <filesystem>
 #include <iostream>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -224,6 +230,49 @@ bool fetch_stats_once(const std::string& url, int timeout_sec, int& status, std:
   return true;
 }
 
+ParsedUrl video_service_base_url() {
+  const std::string raw = getenv_or("VIDEO_SERVICE_URL", "http://video:8765");
+  ParsedUrl pu;
+  if (!parse_http_url(raw, pu)) {
+    pu.host = "video";
+    pu.port = 8765;
+    pu.path = "/";
+  }
+  return pu;
+}
+
+bool safe_profile_id(const std::string& s) {
+  if (s.empty() || s.size() > 64) return false;
+  for (unsigned char c : s) {
+    if (std::isalnum(c) != 0 || c == '_' || c == '-') continue;
+    return false;
+  }
+  return true;
+}
+
+bool fetch_video_upstream_path(const ParsedUrl& base, const std::string& path_query, int timeout_sec, int& status,
+                               std::string& body, std::string& content_type) {
+  httplib::Client cli(base.host, base.port);
+  cli.set_read_timeout(timeout_sec, 0);
+  cli.set_connection_timeout(3, 0);
+  auto res = cli.Get(path_query.c_str());
+  if (!res) return false;
+  status = res->status;
+  body = res->body;
+  auto it = res->headers.find("Content-Type");
+  content_type = it != res->headers.end() ? it->second : "application/json";
+  return true;
+}
+
+struct MjpegBridge {
+  std::mutex mu;
+  std::condition_variable cv;
+  std::deque<std::string> q;
+  bool upstream_done = false;
+  std::atomic<bool> abort{false};
+  std::thread th;
+};
+
 bool proxy_stats_to_response(const std::vector<std::string>& candidates, int timeout_sec, httplib::Response& res) {
   std::string last_what;
   for (const auto& url : candidates) {
@@ -341,6 +390,8 @@ int main() {
     if (incoming.contains("background")) cur["background"] = incoming["background"];
     if (incoming.contains("networkDraft")) cur["networkDraft"] = incoming["networkDraft"];
     if (incoming.contains("netplanYaml")) cur["netplanYaml"] = incoming["netplanYaml"];
+    if (incoming.contains("videoCameraProfile") && incoming["videoCameraProfile"].is_string())
+      cur["videoCameraProfile"] = incoming["videoCameraProfile"];
     if (!write_settings_atomic(cur)) {
       res.status = 500;
       res.set_content("cannot write settings", "text/plain; charset=utf-8");
@@ -388,7 +439,7 @@ int main() {
     }
 
     bool reboot_scheduled = false;
-    if (!env_flag_off("HMI_REBOOT_AFTER_NETPLAN", "1")) {
+    if (!env_flag_off("HMI_REBOOT_AFTER_NETPLAN", "0")) {
       if (access("/usr/bin/nsenter", X_OK) == 0 || access("/bin/nsenter", X_OK) == 0) {
         schedule_host_reboot();
         reboot_scheduled = true;
@@ -402,6 +453,120 @@ int main() {
     proxy_stats_to_response(stats_urls, stats_timeout, res);
   });
 
+  const int video_fetch_timeout = [] {
+    try {
+      return static_cast<int>(std::lround(std::stod(getenv_or("VIDEO_FETCH_TIMEOUT", "12"))));
+    } catch (...) {
+      return 12;
+    }
+  }();
+
+  svr.Get("/api/video/profiles", [&](const httplib::Request&, httplib::Response& res) {
+    const ParsedUrl vbase = video_service_base_url();
+    int st = 0;
+    std::string body;
+    std::string ct;
+    if (!fetch_video_upstream_path(vbase, "/api/profiles", video_fetch_timeout, st, body, ct)) {
+      json j = {{"error", "video service unreachable"}, {"profiles", json::array()}};
+      res.status = 502;
+      res.set_content(j.dump(), "application/json; charset=utf-8");
+      return;
+    }
+    if (st != 200) {
+      json j = {{"error", "video service returned HTTP " + std::to_string(st)}, {"profiles", json::array()}};
+      res.status = static_cast<int>(st == 404 ? 502 : st);
+      res.set_content(j.dump(), "application/json; charset=utf-8");
+      return;
+    }
+    auto semi = ct.find(';');
+    std::string main_type = semi == std::string::npos ? ct : ct.substr(0, semi);
+    trim_inplace(main_type);
+    if (main_type.empty()) main_type = "application/json";
+    res.status = st;
+    res.set_content(body, main_type.c_str());
+    res.set_header("Cache-Control", "no-store");
+  });
+
+  svr.Get("/api/video/ready", [&](const httplib::Request& req, httplib::Response& res) {
+    const ParsedUrl vbase = video_service_base_url();
+    std::string qprof = req.get_param_value("profile");
+    trim_inplace(qprof);
+    std::string path = "/api/ready";
+    if (!qprof.empty() && safe_profile_id(qprof)) path += "?profile=" + qprof;
+    int st = 0;
+    std::string body;
+    std::string ct;
+    if (!fetch_video_upstream_path(vbase, path, video_fetch_timeout, st, body, ct)) {
+      json j = {{"ok", false}, {"reason", "video service unreachable"}};
+      res.status = 502;
+      res.set_content(j.dump(), "application/json; charset=utf-8");
+      return;
+    }
+    auto semi = ct.find(';');
+    std::string main_type = semi == std::string::npos ? ct : ct.substr(0, semi);
+    trim_inplace(main_type);
+    if (main_type.empty()) main_type = "application/json";
+    res.status = st;
+    res.set_content(body, main_type.c_str());
+    res.set_header("Cache-Control", "no-store");
+  });
+
+  svr.Get("/api/video/stream", [&](const httplib::Request& req, httplib::Response& res) {
+    std::string prof = req.get_param_value("profile");
+    trim_inplace(prof);
+    if (prof.empty()) prof = "uc60";
+    if (!safe_profile_id(prof)) prof = "uc60";
+
+    const ParsedUrl vbase = video_service_base_url();
+    const std::string upstream_path = std::string("/stream?profile=") + prof;
+
+    auto bridge = std::make_shared<MjpegBridge>();
+    bridge->th = std::thread([bridge, vbase, upstream_path]() {
+      httplib::Client cli(vbase.host, vbase.port);
+      // rpicam-vid (chroot) can take several seconds before the first MJPEG byte.
+      cli.set_read_timeout(120, 0);
+      cli.set_connection_timeout(10, 0);
+      auto result = cli.Get(upstream_path.c_str(), [&](const char* data, size_t len) {
+        if (bridge->abort.load()) return false;
+        {
+          std::lock_guard<std::mutex> lk(bridge->mu);
+          bridge->q.emplace_back(data, len);
+          while (bridge->q.size() > 64) bridge->q.pop_front();
+        }
+        bridge->cv.notify_one();
+        return true;
+      });
+      std::lock_guard<std::mutex> lk(bridge->mu);
+      bridge->upstream_done = true;
+      (void)result;
+      bridge->cv.notify_all();
+    });
+
+    res.set_header("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.set_content_provider(
+        "multipart/x-mixed-replace; boundary=frame",
+        [bridge](size_t /*offset*/, httplib::DataSink& sink) -> bool {
+          std::unique_lock<std::mutex> lk(bridge->mu);
+          for (;;) {
+            if (bridge->abort.load()) return false;
+            while (!bridge->q.empty()) {
+              std::string chunk = std::move(bridge->q.front());
+              bridge->q.pop_front();
+              lk.unlock();
+              if (!sink.write(chunk.data(), chunk.size())) return false;
+              lk.lock();
+            }
+            if (bridge->upstream_done) return false;
+            bridge->cv.wait_for(lk, std::chrono::milliseconds(400));
+          }
+        },
+        [bridge](bool /*success*/) {
+          bridge->abort = true;
+          bridge->cv.notify_all();
+          if (bridge->th.joinable()) bridge->th.join();
+        });
+  });
+
   auto serve_index = [](const httplib::Request&, httplib::Response& res) {
     auto raw = read_text_file("./static/index.html");
     if (!raw) {
@@ -409,6 +574,7 @@ int main() {
       res.set_content("missing index.html", "text/plain; charset=utf-8");
       return;
     }
+    res.set_header("Cache-Control", "no-store, no-cache, must-revalidate");
     res.set_content(*raw, "text/html; charset=utf-8");
   };
   svr.Get("/", serve_index);

@@ -12,3 +12,7 @@ services:
   hmi:
     build:
       context: ./services/hmi
+
+  video:
+    build:
+      context: ./services/video

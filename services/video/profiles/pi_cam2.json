@@ -1,0 +1,13 @@
+{
+  "id": "pi_cam2",
+  "label": "Raspberry Pi - Camera Module 2.1",
+  "interface": "mipi",
+  "manufacturer": "Raspberry Pi",
+  "model": "Camera Module 2.1",
+  "capture": "rpicam-vid",
+  "width": 1280,
+  "height": 720,
+  "fps": 30,
+  "pixel_format": "mjpeg",
+  "jpeg_quality": 85
+}

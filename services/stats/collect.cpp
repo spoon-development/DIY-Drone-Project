@@ -1,8 +1,14 @@
 #include "collect.hpp"
 
+#include <arpa/inet.h>
 #include <dirent.h>
+#include <fcntl.h>
+#include <ifaddrs.h>
+#include <sched.h>
+#include <sys/socket.h>
 #include <sys/statvfs.h>
 #include <sys/utsname.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <cctype>
@@ -11,6 +17,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <optional>
 #include <regex>
 #include <sstream>
@@ -358,7 +365,106 @@ nlohmann::json parse_cpuinfo_board(const std::string& host_proc) {
   return out;
 }
 
-nlohmann::json iface_rows_to_json(const std::vector<IfaceRow>& rows) {
+std::map<std::string, std::string> host_ipv4_via_setns(const std::string& host_proc) {
+  std::map<std::string, std::string> out;
+  const int host_ns = open((host_proc + "/1/ns/net").c_str(), O_RDONLY);
+  if (host_ns < 0) return out;
+  const int self_ns = open("/proc/self/ns/net", O_RDONLY);
+  if (self_ns < 0) {
+    close(host_ns);
+    return out;
+  }
+  if (setns(host_ns, CLONE_NEWNET) != 0) {
+    close(host_ns);
+    close(self_ns);
+    return out;
+  }
+
+  ifaddrs* ifa = nullptr;
+  if (getifaddrs(&ifa) == 0) {
+    for (ifaddrs* it = ifa; it; it = it->ifa_next) {
+      if (!it->ifa_addr || it->ifa_addr->sa_family != AF_INET || !it->ifa_name) continue;
+      if (is_virtual_iface(it->ifa_name)) continue;
+      char buf[INET_ADDRSTRLEN] = {};
+      const auto* sin = reinterpret_cast<const sockaddr_in*>(it->ifa_addr);
+      if (!inet_ntop(AF_INET, &sin->sin_addr, buf, sizeof buf)) continue;
+      const std::string ip(buf);
+      if (ip.empty() || ip == "0.0.0.0") continue;
+      if (!out.count(it->ifa_name)) out[it->ifa_name] = ip;
+    }
+    freeifaddrs(ifa);
+  }
+
+  setns(self_ns, CLONE_NEWNET);
+  close(host_ns);
+  close(self_ns);
+  return out;
+}
+
+std::optional<std::string> read_iface_ifindex_str(const std::string& host_sys, const std::string& name) {
+  auto raw = read_file(host_sys + "/class/net/" + name + "/ifindex");
+  if (!raw) return std::nullopt;
+  trim_inplace(*raw);
+  if (raw->empty()) return std::nullopt;
+  return *raw;
+}
+
+std::optional<std::string> parse_systemd_netif_lease_address(const std::string& host_root,
+                                                             const std::string& ifindex) {
+  auto text = read_file(host_root + "/run/systemd/netif/leases/" + ifindex);
+  if (!text) return std::nullopt;
+  std::istringstream iss(*text);
+  std::string line;
+  while (std::getline(iss, line)) {
+    if (line.rfind("ADDRESS=", 0) != 0) continue;
+    std::string addr = line.substr(8);
+    trim_inplace(addr);
+    if (!addr.empty()) return addr;
+  }
+  return std::nullopt;
+}
+
+std::map<std::string, std::string> host_ipv4_from_systemd_netif(const std::string& host_sys,
+                                                                 const std::string& host_root,
+                                                                 const std::vector<IfaceRow>& ifaces) {
+  std::map<std::string, std::string> out;
+  for (const auto& row : ifaces) {
+    if (row.name == "lo" || is_virtual_iface(row.name)) continue;
+    const auto idx = read_iface_ifindex_str(host_sys, row.name);
+    if (!idx) continue;
+    const auto addr = parse_systemd_netif_lease_address(host_root, *idx);
+    if (addr) out[row.name] = *addr;
+  }
+  return out;
+}
+
+std::map<std::string, std::string> host_ipv4_by_iface(const std::string& host_proc,
+                                                      const std::string& host_sys,
+                                                      const std::string& host_root,
+                                                      const std::vector<IfaceRow>& ifaces) {
+  auto out = host_ipv4_via_setns(host_proc);
+  if (out.empty()) out = host_ipv4_from_systemd_netif(host_sys, host_root, ifaces);
+  return out;
+}
+
+std::optional<std::string> pick_medium_ipv4(const std::map<std::string, std::string>& addrs,
+                                            const std::vector<IfaceRow>& ifaces, int medium) {
+  std::vector<IfaceRow> sorted = ifaces;
+  std::sort(sorted.begin(), sorted.end(), [](const IfaceRow& a, const IfaceRow& b) {
+    return sort_key_for_iface(a) < sort_key_for_iface(b);
+  });
+  for (const auto& row : sorted) {
+    if (row.name == "lo" || is_virtual_iface(row.name)) continue;
+    const auto sk = sort_key_for_iface(row);
+    if (std::get<1>(sk) != medium) continue;
+    const auto it = addrs.find(row.name);
+    if (it != addrs.end()) return it->second;
+  }
+  return std::nullopt;
+}
+
+nlohmann::json iface_rows_to_json(const std::vector<IfaceRow>& rows,
+                                  const std::map<std::string, std::string>& addrs) {
   nlohmann::json arr = nlohmann::json::array();
   for (const auto& r : rows) {
     nlohmann::json o{{"name", r.name}};
@@ -367,6 +473,8 @@ nlohmann::json iface_rows_to_json(const std::vector<IfaceRow>& rows) {
       o["operstate"] = nullptr;
     if (r.mac) o["mac"] = *r.mac;
     if (r.carrier) o["carrier"] = *r.carrier;
+    const auto ip_it = addrs.find(r.name);
+    o["ipv4"] = ip_it != addrs.end() ? nlohmann::json(ip_it->second) : nlohmann::json(nullptr);
     arr.push_back(std::move(o));
   }
   return arr;
@@ -472,6 +580,9 @@ nlohmann::json grep_dhcpcd_hints(const std::string& host_root) {
 
 nlohmann::json network_summary(const std::string& host_proc, const std::string& host_sys, const std::string& host_root) {
   auto ifaces_rows = list_sysfs_net_ifaces(host_sys);
+  const auto ipv4_by_iface = host_ipv4_by_iface(host_proc, host_sys, host_root, ifaces_rows);
+  const auto lan_ipv4 = pick_medium_ipv4(ipv4_by_iface, ifaces_rows, 0);
+  const auto wifi_ipv4 = pick_medium_ipv4(ipv4_by_iface, ifaces_rows, 1);
   auto all_defaults = default_routes_from_proc(host_proc);
   auto route = default_ipv4_route(host_proc);
   auto netplan = grep_netplan_hints(host_root);
@@ -526,12 +637,14 @@ nlohmann::json network_summary(const std::string& host_proc, const std::string& 
   nlohmann::json dhcpcd_json = nlohmann::json::array();
   for (const auto& s : dhcpcd) dhcpcd_json.push_back(s);
 
-  return nlohmann::json{{"interfaces", iface_rows_to_json(ifaces_rows)},
+  return nlohmann::json{{"interfaces", iface_rows_to_json(ifaces_rows, ipv4_by_iface)},
                         {"default_route", route.empty() ? nullptr : route},
                         {"default_routes", nlohmann::json(sorted_defaults)},
                         {"static_iface_hint", suggested_static_iface(route.empty() ? nlohmann::json::object() : route, ifaces_rows)},
                         {"config_hints", nlohmann::json{{"netplan", netplan}, {"dhcpcd", dhcpcd_json}}},
-                        {"primary_ipv4_hint", primary ? nlohmann::json(*primary) : nlohmann::json(nullptr)}};
+                        {"primary_ipv4_hint", primary ? nlohmann::json(*primary) : nlohmann::json(nullptr)},
+                        {"lan_ipv4", lan_ipv4 ? nlohmann::json(*lan_ipv4) : nlohmann::json(nullptr)},
+                        {"wifi_ipv4", wifi_ipv4 ? nlohmann::json(*wifi_ipv4) : nlohmann::json(nullptr)}};
 }
 
 }  // namespace

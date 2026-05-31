@@ -1,6 +1,6 @@
 # Drone Bros Inc — Pi stats & flight deck HMI
 
-A minimal Docker stack for **Raspberry Pi** (and similar ARM boards): a **stats** service reads host telemetry from the kernel, and an **HMI** serves a single-page dashboard on **one TCP port**. The browser never talks to the stats container directly; the HMI app proxies **`/api/stats`** on the same origin.
+A minimal Docker stack for **Raspberry Pi** (and similar ARM boards): a **stats** service reads host telemetry from the kernel, a **video** service captures USB and MIPI cameras, and an **HMI** serves a single-page dashboard on **one TCP port**. The browser never talks to the stats or video containers directly; the HMI proxies **`/api/stats`**, **`/api/video/profiles`**, and **`/api/video/stream`** on the same origin.
 
 ## Architecture
 
@@ -14,19 +14,22 @@ A minimal Docker stack for **Raspberry Pi** (and similar ARM boards): a **stats*
                             │
 ┌───────────────────────────▼─────────────────────────────┐
 │  dronebros-hmi (C++ / cpp-httplib)                       │
-│  /  → static UI   |   /api/stats → proxy to stats       │
+│  /  → static UI   |   /api/stats → stats                 │
+│                   |   /api/video/* → video               │
 └───────────────────────────┬─────────────────────────────┘
                    Docker network (internal)
-                            │
-┌───────────────────────────▼─────────────────────────────┐
-│  dronebros-stats (C++)  :9101  (not published)           │
-│  mounts: /proc, /sys, / → read-only host metrics         │
-└─────────────────────────────────────────────────────────┘
+              ┌────────────┴────────────┐
+┌─────────────▼─────────────┐ ┌────────▼──────────────────┐
+│  dronebros-stats (C++)    │ │  dronebros-video (C++/V4L2)│
+│  :9101 (not published)     │ │  :8765 (not published)   │
+│  mounts: /proc, /sys, /   │ │  privileged; autodetect   │
+└───────────────────────────┘ └───────────────────────────┘
 ```
 
 | Container | Image | Host port | Purpose |
 |-----------|--------|-----------|---------|
 | `dronebros-stats` | `ghcr.io/<owner>/dronebros-stats` | *none* | JSON metrics: temp, load, memory, uptime, disk, compute, network |
+| `dronebros-video` | `ghcr.io/<owner>/dronebros-video` | *none* | C++ camera capture (V4L2 + rpicam-vid); **privileged**; Compose profile **`video`**; HMI starts stream on demand |
 | `dronebros-hmi` | `ghcr.io/<owner>/dronebros-hmi` | **8080** (configurable) | Web UI + reverse proxy; **`hmi-data`** on the host stores UI settings |
 
 ## Requirements
@@ -39,20 +42,22 @@ A minimal Docker stack for **Raspberry Pi** (and similar ARM boards): a **stats*
 
 | Step | You use | What it does |
 |------|---------|--------------|
-| **Build** | **`bash ./build/build.sh`** (optional **`--arm`** for Pi / **`--amd`** for PC) | **`docker compose build`** for **`stats`** + **`hmi`**. |
-| **Push** | **`bash ./build/push-images.sh`** (optional **`--image multi`** / **`amd64`** / **`arm64`**) | **buildx** push to GHCR using **`deploy/config/stack.yml`** registry/tag (needs **buildx** + login). |
+| **Build** | **`bash ./build/build.sh`** (optional **`--arm`** / **`--amd`**, **`--force`**, **`--only hmi`**) | **`docker compose build`**; skips unchanged services unless **`--force`** or **`SKIP_UNCHANGED=0`**. |
+| **Push** | **`bash ./build/push-images.sh`** (optional **`--image …`**, **`--force`**, **`--only stats,video`**) | **buildx** push; skips unchanged contexts unless **`--force`**. |
 | **Git** | *Your choice* | Commit and push source (backup / collaboration only — images reach GHCR via **`push-images.sh`**). |
-| **Deploy** | **`bash ./deploy/deploy.sh`** | Pull images **on your machine**, **save** tars, **scp** + **`docker load`** on the Pi, then Ansible: compose + **`.env`**, tear down, **up** (Pi does **not** pull GHCR by default). **`--pull-on-pi`** restores registry pull on the Pi; **`--skip-bundle`** if images are already loaded. |
+| **Deploy** | **`bash ./deploy/deploy.sh`** | **`--local`**: ship images from **`build/build.sh`** (no push). **Default / `--registry`**: pull GHCR after **`push-images.sh`**. **`--local --build`**: rebuild inside deploy. **`--skip-bundle`**: compose/config only. |
+
+**Video (optional):** enable Compose profile **`video`** via `compose_profiles: video` in [`deploy/config/stack.yml`](deploy/config/stack.yml). The container is **privileged** (no fixed `devices:`) so **`docker compose up` still succeeds** without a camera plugged in. The HMI **Video** tab does **not** auto-start — use **Start live stream** after the camera is connected (the UI calls **`/api/video/ready`** first). MIPI boot config is manual on the Pi (`mipi_camera_configure: false` in stack.yml).
 
 ## Standard process when you change code
 
-The Pi runs **images from GHCR**, not your laptop’s source tree. If you changed anything that ships **inside** an image (**`services/stats`**, **`services/hmi`**, Dockerfiles) or you need the Pi on a **new image tag**, always do **push then deploy** in that order.
+The Pi runs **images from GHCR**, not your laptop’s source tree. If you changed anything that ships **inside** an image (**`services/stats`**, **`services/hmi`**, **`services/video`**, Dockerfiles) or you need the Pi on a **new image tag**, always do **push then deploy** in that order.
 
 From the **repo root** on your dev machine (WSL/Linux or macOS; use **`bash`** so scripts don’t hit CRLF issues):
 
 1. **`docker login ghcr.io`** — when needed (PAT with **`write:packages`** for push; Pi needs **`read:packages`** if packages are private).
 2. **`bash ./build/build.sh`** — optional but catches build errors early. Use **`--arm`** or **`--amd`** if you want a single-arch local build.
-3. **`bash ./build/push-images.sh`** — publishes **`dronebros-stats`** and **`dronebros-hmi`** to **`stack_image_registry` / `stack_image_tag`** in [`deploy/config/stack.yml`](deploy/config/stack.yml). Default is multi-arch; use **`--image arm64`** if you only push for the Pi.
+3. **`bash ./build/push-images.sh`** — publishes **`dronebros-stats`**, **`dronebros-hmi`**, and **`dronebros-video`** to **`stack_image_registry` / `stack_image_tag`** in [`deploy/config/stack.yml`](deploy/config/stack.yml). Default is multi-arch; use **`--image arm64`** if you only push for the Pi.
 4. **`bash ./deploy/deploy.sh`** — Pulls images on your laptop, copies them to the Pi, **`docker load`** there, then Ansible refreshes **`docker-compose.yml`** and **`.env`** and **recreates** the stack (no registry access required on the Pi).
 
 Until step **4** finishes, the vehicle can still be running **old** images — the UI will not match your latest edits.
@@ -75,7 +80,7 @@ Compose variable defaults (`${IMAGE_REGISTRY:-…}`) work without a `.env` file 
 | Area | Path | Purpose |
 |------|------|---------|
 | **Build** | [`build/build.sh`](build/build.sh) | Local **`docker compose build`**; **`--arm`** (**linux/arm64**, Pi) or **`--amd`** (**linux/amd64**, PC). |
-| **Push** | [`build/push-images.sh`](build/push-images.sh) | **buildx** push **`stats`** + **`hmi`** to GHCR (registry/tag from [`deploy/config/stack.yml`](deploy/config/stack.yml)). |
+| **Push** | [`build/push-images.sh`](build/push-images.sh) | **buildx** push **`stats`**, **`hmi`**, and **`video`**; **`--force`** / **`--only`**; skips unchanged service trees (see script header). |
 | **Deploy** | [`deploy/`](deploy/) | Inventory, **`stack.yml`**, Ansible, **`deploy.sh`** only (no image build here). |
 
 | Path | Purpose |
@@ -88,7 +93,7 @@ Compose variable defaults (`${IMAGE_REGISTRY:-…}`) work without a `.env` file 
 ### Publish images to GHCR (your machine)
 
 1. **Once:** **`docker login ghcr.io`** — GitHub username + a **PAT** with **`write:packages`** (and **`read:packages`**). Image names must match **`stack_image_registry`** / **`stack_image_tag`** in **`deploy/config/stack.yml`** (typically **`ghcr.io/<repo-owner-lowercase>/...`**).
-2. **`bash ./build/build.sh`** then **`bash ./build/push-images.sh`** — **buildx**-pushes both images (default **multi-arch** so the Pi gets **arm64**). Use **`bash ./build/push-images.sh --image arm64`** for a single-arch push if you want.
+2. **`bash ./build/build.sh`** then **`bash ./build/push-images.sh`** — **buildx**-pushes all stack images (default **multi-arch** so the Pi gets **arm64**). Use **`bash ./build/push-images.sh --image arm64`** for a single-arch push if you want.
 3. Deploy with **`bash ./deploy/deploy.sh`** (default: pull on your laptop, tarball, **`docker load`** on the Pi — no registry on the Pi).
 
 **Private packages:** the Pi (or your laptop when pulling) needs **`docker login ghcr.io`** with **`read:packages`**, or make the GHCR package **Public**.
@@ -121,8 +126,11 @@ sudo apt update && sudo apt install -y ansible-core
 **Every deploy** (from repo root):
 
 ```bash
+bash ./build/build.sh --arm
+bash ./deploy/deploy.sh --local       # ship local images (set ansible_host in deploy/inventory/hosts.yml)
+bash ./build/push-images.sh
 bash ./deploy/deploy.sh
-# One host:   bash ./deploy/deploy.sh --limit pi
+# One host:   bash ./deploy/deploy.sh --local --limit pi
 # Dry run:    bash ./deploy/deploy.sh --check
 # Pi pulls GHCR itself (needs internet on Pi):  bash ./deploy/deploy.sh --pull-on-pi
 # Images already on Pi:  bash ./deploy/deploy.sh --skip-bundle
@@ -211,9 +219,10 @@ docker compose down
 │   └── ansible/              # ansible.cfg + playbooks/deploy.yml
 ├── services/
 │   ├── stats/
-│   └── hmi/
+│   ├── hmi/
+│   └── video/
 ```
 
 ## License / project
 
-Part of the **DIY-Drone-Project** effort — stats + HMI slice only; extend with more services and compose profiles as needed.
+Part of the **DIY-Drone-Project** effort — stats, video, and HMI stack; extend with more services and compose profiles as needed.

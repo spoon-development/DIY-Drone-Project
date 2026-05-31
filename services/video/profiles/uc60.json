@@ -1,0 +1,14 @@
+{
+  "id": "uc60",
+  "label": "Arducam - UC60",
+  "interface": "usb",
+  "manufacturer": "Arducam",
+  "model": "UC60",
+  "device": "auto",
+  "device_match": "UC60",
+  "width": 1280,
+  "height": 720,
+  "fps": 30,
+  "pixel_format": "mjpeg",
+  "jpeg_quality": 85
+}

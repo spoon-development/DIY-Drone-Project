@@ -1,4 +1,5 @@
 .env
+.build/
 hmi-data/
 deploy/.venv/
 *.log

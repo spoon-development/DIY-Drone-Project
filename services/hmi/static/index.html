@@ -9,7 +9,7 @@
       color-scheme: dark;
       --bg0: #070a10;
       --bg1: #0d1220;
-      --card: rgba(22, 30, 48, 0.72);
+      --card: rgba(22, 30, 48, 0.32);
       --card-border: rgba(120, 170, 255, 0.12);
       --text: #eef3ff;
       --muted: #8b9cc4;
@@ -18,7 +18,7 @@
       --good: #4ade80;
       --warn: #fbbf24;
       --bad: #f87171;
-      --shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+      --shadow: 0 16px 48px rgba(0, 0, 0, 0.22);
       --radius: 16px;
       --font: ui-sans-serif, system-ui, "Segoe UI", Roboto, Ubuntu, Cantarell, "Noto Sans", sans-serif;
     }
@@ -258,6 +258,23 @@
     @media (min-width: 520px) {
       .net-grid.two { grid-template-columns: 1fr 1fr; }
     }
+    .net-section-title {
+      margin: 1.15rem 0 0.35rem;
+      font-size: 0.78rem;
+      font-weight: 650;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .net-section-title:first-of-type { margin-top: 0.35rem; }
+    .iface-status {
+      margin: 0 0 0.65rem;
+      font-size: 0.82rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+    .iface-status .state-active { color: var(--good); font-weight: 600; }
+    .iface-status .state-inactive { opacity: 0.85; }
     .field label {
       display: block;
       font-size: 0.72rem;
@@ -393,6 +410,180 @@
       color: var(--muted);
       line-height: 1.45;
     }
+    .video-card {
+      position: relative;
+      max-width: 56rem;
+      padding: 1rem 1.15rem 1.15rem;
+      margin: 0;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+      min-height: 0;
+    }
+    .video-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 0.65rem 1rem;
+      margin-bottom: 0.85rem;
+    }
+    .video-control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.28rem;
+      min-width: 0;
+    }
+    .video-control-group label {
+      font-size: 0.62rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 650;
+      margin: 0;
+    }
+    .video-control-group select {
+      min-width: 9rem;
+      max-width: 14rem;
+      padding: 0.42rem 0.55rem;
+      border-radius: 10px;
+      border: 1px solid var(--card-border);
+      background: rgba(0, 0, 0, 0.22);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.84rem;
+    }
+    .video-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin-left: auto;
+    }
+    .video-actions button {
+      font-family: inherit;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.42rem 0.85rem;
+      border-radius: 10px;
+      border: 1px solid rgba(94, 184, 255, 0.35);
+      background: rgba(94, 184, 255, 0.12);
+      color: var(--accent);
+      cursor: pointer;
+    }
+    .video-actions button.secondary {
+      border-color: var(--card-border);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+    }
+    .video-actions button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .video-stage {
+      position: relative;
+      border-radius: calc(var(--radius) - 2px);
+      overflow: hidden;
+      background: rgba(0, 0, 0, 0.4);
+      aspect-ratio: 16 / 9;
+      max-height: min(72vh, 720px);
+      border: 1px solid var(--card-border);
+    }
+    .video-frame {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      background: #000;
+    }
+    .video-mjpeg {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      object-position: center center;
+      display: block;
+      margin: 0;
+      padding: 0;
+      border: none;
+      outline: none;
+      background: #000;
+      vertical-align: top;
+    }
+    .video-stage.has-frame .video-mjpeg {
+      cursor: pointer;
+      transform: scale(1.035);
+      transform-origin: center center;
+    }
+    .video-status {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      text-align: center;
+      font-size: 0.88rem;
+      color: rgba(168, 178, 204, 0.72);
+      z-index: 1;
+      pointer-events: none;
+    }
+    .video-stage.has-frame .video-status {
+      display: none;
+    }
+    .video-stage:fullscreen {
+      max-height: none;
+      aspect-ratio: unset;
+      width: 100%;
+      height: 100%;
+      border-radius: 0;
+      border: none;
+    }
+    .video-fs-btn {
+      position: absolute;
+      bottom: 0.65rem;
+      right: 0.65rem;
+      z-index: 3;
+      box-sizing: border-box;
+      width: 2.25rem;
+      height: 2.25rem;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      border: none;
+      background: rgba(0, 0, 0, 0.45);
+      color: rgba(230, 236, 255, 0.88);
+      cursor: pointer;
+      opacity: 0.85;
+      transition: opacity 0.15s ease, background 0.15s ease;
+    }
+    .video-fs-btn:hover:not(:disabled) {
+      opacity: 1;
+      background: rgba(0, 0, 0, 0.62);
+      color: var(--text);
+    }
+    .video-fs-btn:focus-visible {
+      outline: 2px solid rgba(94, 184, 255, 0.55);
+      outline-offset: 2px;
+    }
+    .video-fs-btn:disabled {
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .video-fs-btn svg {
+      flex-shrink: 0;
+      display: block;
+    }
+    .video-fs-btn .video-fs-exit {
+      display: none !important;
+    }
+    .video-fs-btn.is-fullscreen .video-fs-enter {
+      display: none !important;
+    }
+    .video-fs-btn.is-fullscreen .video-fs-exit {
+      display: block !important;
+    }
   </style>
 </head>
 <body>
@@ -426,9 +617,38 @@
     </section>
 
     <section id="panel-video" class="tab-panel" role="tabpanel" aria-labelledby="tab-video" hidden>
-      <article class="card" style="max-width: 28rem">
-        <h2>Video</h2>
-        <div class="metric" style="font-size: 1.05rem">No video stream connected yet.</div>
+      <article class="video-card">
+        <div class="video-controls">
+          <div class="video-control-group">
+            <label for="video-interface-select">Interface</label>
+            <select id="video-interface-select" aria-label="Camera interface"></select>
+          </div>
+          <div class="video-control-group">
+            <label for="video-camera-select">Camera</label>
+            <select id="video-camera-select" aria-label="Camera model"></select>
+          </div>
+          <div class="video-actions">
+            <button type="button" class="secondary" id="video-stop-preview" disabled>Stop</button>
+            <button type="button" id="video-start-preview">Start</button>
+          </div>
+        </div>
+        <div class="video-stage" id="video-stage">
+          <div class="video-status" id="video-status">No stream</div>
+          <div class="video-frame">
+            <img class="video-mjpeg" id="video-mjpeg" alt="" decoding="async" hidden title="Double-click for full screen" />
+          </div>
+          <button type="button" class="video-fs-btn" id="video-fullscreen" disabled aria-label="Enter full screen" title="Full screen" aria-pressed="false">
+            <svg class="video-fs-enter" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7M3 9V3h6M21 15v6h-6" />
+            </svg>
+            <svg class="video-fs-exit" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="4 14 10 14 10 20" />
+              <polyline points="20 10 14 10 14 4" />
+              <line x1="14" y1="10" x2="21" y2="3" />
+              <line x1="3" y1="21" x2="10" y2="14" />
+            </svg>
+          </button>
+        </div>
       </article>
     </section>
 
@@ -444,29 +664,46 @@
         <article class="card settings-card" id="network-settings-card">
           <h2>Network</h2>
           <p class="settings-hint" id="network-gate-msg" hidden></p>
-          <p class="settings-hint" id="nf-iface-note">—</p>
+
+          <h3 class="net-section-title">Ethernet</h3>
+          <p class="iface-status" id="nf-lan-status">—</p>
           <div class="net-grid two">
             <div class="field">
-              <label for="nf-ip">IP address</label>
-              <input id="nf-ip" type="text" inputmode="numeric" autocomplete="off" placeholder="192.168.1.50" />
+              <label for="nf-lan-ip">IP address</label>
+              <input id="nf-lan-ip" type="text" inputmode="numeric" autocomplete="off" placeholder="192.168.0.53" />
             </div>
             <div class="field">
-              <label for="nf-netmask">Netmask</label>
-              <input id="nf-netmask" type="text" inputmode="numeric" autocomplete="off" placeholder="255.255.255.0" />
+              <label for="nf-lan-netmask">Netmask</label>
+              <input id="nf-lan-netmask" type="text" inputmode="numeric" autocomplete="off" placeholder="255.255.255.0" />
             </div>
             <div class="field" style="grid-column: 1 / -1">
-              <label for="nf-gw">Gateway</label>
-              <input id="nf-gw" type="text" inputmode="numeric" autocomplete="off" placeholder="192.168.1.1" />
+              <label for="nf-lan-gw">Gateway</label>
+              <input id="nf-lan-gw" type="text" inputmode="numeric" autocomplete="off" placeholder="192.168.0.1" />
             </div>
-            <div id="nf-wifi-extra" class="net-grid two" style="grid-column: 1 / -1" hidden>
-              <div class="field" style="grid-column: 1 / -1">
-                <label for="nf-wifi-ssid">Wi-Fi name</label>
-                <input id="nf-wifi-ssid" type="text" autocomplete="off" placeholder="Your network name" />
-              </div>
-              <div class="field" style="grid-column: 1 / -1">
-                <label for="nf-wifi-psk">Wi-Fi password</label>
-                <input id="nf-wifi-psk" type="password" autocomplete="off" placeholder="Password for static Wi-Fi IP" />
-              </div>
+          </div>
+
+          <h3 class="net-section-title">Wi-Fi</h3>
+          <p class="iface-status" id="nf-wifi-status">—</p>
+          <div class="net-grid two">
+            <div class="field">
+              <label for="nf-wifi-ip">IP address</label>
+              <input id="nf-wifi-ip" type="text" inputmode="numeric" autocomplete="off" placeholder="192.168.0.52" />
+            </div>
+            <div class="field">
+              <label for="nf-wifi-netmask">Netmask</label>
+              <input id="nf-wifi-netmask" type="text" inputmode="numeric" autocomplete="off" placeholder="255.255.255.0" />
+            </div>
+            <div class="field" style="grid-column: 1 / -1">
+              <label for="nf-wifi-gw">Gateway</label>
+              <input id="nf-wifi-gw" type="text" inputmode="numeric" autocomplete="off" placeholder="192.168.0.1" />
+            </div>
+            <div class="field" style="grid-column: 1 / -1">
+              <label for="nf-wifi-ssid">Wi-Fi name</label>
+              <input id="nf-wifi-ssid" type="text" autocomplete="off" placeholder="Your network name" />
+            </div>
+            <div class="field" style="grid-column: 1 / -1">
+              <label for="nf-wifi-psk">Wi-Fi password</label>
+              <input id="nf-wifi-psk" type="password" autocomplete="off" placeholder="Password for static Wi-Fi IP" />
             </div>
           </div>
           <p class="sub" id="network-apply-status" style="min-height: 1.35em; margin-top: 0.75rem" aria-live="polite"></p>
@@ -501,7 +738,7 @@
         <article class="card settings-card">
           <h2>Notes</h2>
           <p class="settings-hint">
-            Apply network writes netplan, applies it, then reboots the Pi shortly after so the stack and network settle the same as a power cycle. Wrong settings can drop SSH — use a console when testing. Copy steps is a manual fallback.
+            Apply network writes netplan and runs netplan apply on the host (no automatic reboot). Wrong settings can drop SSH — use a console when testing. Copy steps is a manual fallback.
           </p>
         </article>
       </div>
@@ -519,15 +756,27 @@
     const clock = document.getElementById("clock");
     const computeChip = document.getElementById("compute-chip");
 
-    const LS_NET = "hmi_network_draft_v2";
+    const LS_NET = "hmi_network_draft_v3";
     const LS_BG = "hmi_user_background_v1";
-    const NETWORK_FIELD_IDS = ["nf-ip", "nf-netmask", "nf-gw", "nf-wifi-ssid", "nf-wifi-psk"];
+    const NETWORK_FIELD_IDS = [
+      "nf-lan-ip",
+      "nf-lan-netmask",
+      "nf-lan-gw",
+      "nf-wifi-ip",
+      "nf-wifi-netmask",
+      "nf-wifi-gw",
+      "nf-wifi-ssid",
+      "nf-wifi-psk",
+    ];
     let lastMetrics = null;
     /** Set on the Pi via DISPLAY_HOSTNAME in .env (Ansible runs `hostname` at deploy). */
     let deployHostLabel = "";
-    let netIfaceChosen = "eth0";
+    let netFormSeeded = false;
     let pendingBgDataUrl = null;
     let lastBgState = null;
+    let videoCameraProfile = "uc60";
+    let videoStreamActive = false;
+    let videoConnectTimer = null;
 
     const bgFile = document.getElementById("bg-file");
     const bgPreviewWrap = document.getElementById("bg-preview-wrap");
@@ -539,6 +788,206 @@
     const appearanceApply = document.getElementById("appearance-apply");
     const appearanceApplyStatus = document.getElementById("appearance-apply-status");
     const settingsCopySsh = document.getElementById("settings-copy-ssh");
+
+    const videoStage = document.getElementById("video-stage");
+    const videoStatus = document.getElementById("video-status");
+    const videoMjpeg = document.getElementById("video-mjpeg");
+    const videoInterfaceSelect = document.getElementById("video-interface-select");
+    const videoCameraSelect = document.getElementById("video-camera-select");
+    const videoStartPreview = document.getElementById("video-start-preview");
+    const videoStopPreview = document.getElementById("video-stop-preview");
+    const videoFullscreenBtn = document.getElementById("video-fullscreen");
+    const VIDEO_INTERFACES = [
+      { id: "usb", label: "USB" },
+      { id: "mipi", label: "MIPI" },
+      { id: "gmsl", label: "GMSL" },
+    ];
+    let videoProfilesCache = [];
+    const DEFAULT_VIDEO_PROFILE = "uc60";
+    const STATIC_VIDEO_PROFILES = [
+      {
+        id: "uc60",
+        label: "Arducam - UC60",
+        interface: "usb",
+        manufacturer: "Arducam",
+        model: "UC60",
+      },
+      {
+        id: "pi_cam3",
+        label: "Raspberry Pi - Camera Module 3",
+        interface: "mipi",
+        manufacturer: "Raspberry Pi",
+        model: "Camera Module 3",
+      },
+      {
+        id: "pi_cam2",
+        label: "Raspberry Pi - Camera Module 2.1",
+        interface: "mipi",
+        manufacturer: "Raspberry Pi",
+        model: "Camera Module 2.1",
+      },
+    ];
+
+    function videoProfileDisplayName(row) {
+      if (!row) return "";
+      if (row.manufacturer && row.model) return row.manufacturer + " - " + row.model;
+      return row.label || row.id || "";
+    }
+
+    function normalizeVideoProfile(row) {
+      if (!row || !row.id) return null;
+      const iface = String(row.interface || "usb").toLowerCase();
+      const out = {
+        id: row.id,
+        label: row.label || row.id,
+        interface: iface,
+        manufacturer: row.manufacturer || "",
+        model: row.model || "",
+      };
+      if (!out.manufacturer && !out.model && out.label.includes(" - ")) {
+        const sep = out.label.indexOf(" - ");
+        out.manufacturer = out.label.slice(0, sep);
+        out.model = out.label.slice(sep + 3);
+      }
+      return out;
+    }
+
+    function getSelectedVideoProfileId() {
+      return (videoCameraSelect && videoCameraSelect.value) || videoCameraProfile || DEFAULT_VIDEO_PROFILE;
+    }
+
+    function fillVideoInterfaceSelect(profiles) {
+      if (!videoInterfaceSelect) return;
+      const rows = Array.isArray(profiles) ? profiles : [];
+      const counts = new Map();
+      for (const row of rows) {
+        const iface = String(row.interface || "usb").toLowerCase();
+        counts.set(iface, (counts.get(iface) || 0) + 1);
+      }
+      videoInterfaceSelect.innerHTML = "";
+      for (const iface of VIDEO_INTERFACES) {
+        const opt = document.createElement("option");
+        opt.value = iface.id;
+        opt.textContent = iface.label;
+        opt.disabled = !counts.get(iface.id);
+        videoInterfaceSelect.appendChild(opt);
+      }
+    }
+
+    function fillVideoCameraSelect(profiles, iface, wantId) {
+      if (!videoCameraSelect) return "";
+      const rows = (Array.isArray(profiles) ? profiles : [])
+        .filter((row) => String(row.interface || "usb").toLowerCase() === iface)
+        .sort((a, b) => videoProfileDisplayName(a).localeCompare(videoProfileDisplayName(b)));
+      videoCameraSelect.innerHTML = "";
+      if (!rows.length) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "No cameras configured";
+        opt.disabled = true;
+        videoCameraSelect.appendChild(opt);
+        videoCameraSelect.disabled = true;
+        return "";
+      }
+      videoCameraSelect.disabled = false;
+      for (const row of rows) {
+        const opt = document.createElement("option");
+        opt.value = row.id;
+        opt.textContent = videoProfileDisplayName(row);
+        videoCameraSelect.appendChild(opt);
+      }
+      const has = rows.some((row) => row.id === wantId);
+      const pick = has ? wantId : rows[0].id;
+      videoCameraSelect.value = pick;
+      return pick;
+    }
+
+    function syncVideoSelectsFromProfileId(profiles, wantId) {
+      const rows = Array.isArray(profiles) ? profiles : [];
+      const hit = rows.find((row) => row.id === wantId);
+      let iface = hit ? String(hit.interface || "usb").toLowerCase() : "usb";
+      if (!rows.some((row) => String(row.interface || "usb").toLowerCase() === iface)) {
+        const first = rows[0];
+        iface = first ? String(first.interface || "usb").toLowerCase() : "usb";
+      }
+      if (videoInterfaceSelect) {
+        const hasIface = Array.from(videoInterfaceSelect.options).some((o) => o.value === iface && !o.disabled);
+        if (hasIface) videoInterfaceSelect.value = iface;
+        else {
+          const enabled = Array.from(videoInterfaceSelect.options).find((o) => !o.disabled);
+          if (enabled) {
+            iface = enabled.value;
+            videoInterfaceSelect.value = iface;
+          }
+        }
+      }
+      const picked = fillVideoCameraSelect(rows, iface, wantId);
+      videoCameraProfile = picked || wantId;
+      return videoCameraProfile;
+    }
+
+    function fillVideoProfileSelect(list) {
+      const normalized = [];
+      const seen = new Set();
+      const rows = Array.isArray(list) && list.length ? list : STATIC_VIDEO_PROFILES;
+      for (const row of rows) {
+        const p = normalizeVideoProfile(row);
+        if (!p || seen.has(p.id)) continue;
+        seen.add(p.id);
+        normalized.push(p);
+      }
+      if (!normalized.length) {
+        for (const row of STATIC_VIDEO_PROFILES) {
+          const p = normalizeVideoProfile(row);
+          if (p) normalized.push(p);
+        }
+      }
+      videoProfilesCache = normalized;
+      fillVideoInterfaceSelect(normalized);
+      syncVideoSelectsFromProfileId(normalized, videoCameraProfile);
+    }
+
+    function videoFullscreenElement() {
+      return (
+        document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.msFullscreenElement ||
+        null
+      );
+    }
+
+    function syncVideoFullscreenButton() {
+      if (!videoFullscreenBtn || !videoStage) return;
+      const fs = videoFullscreenElement() === videoStage;
+      videoFullscreenBtn.classList.toggle("is-fullscreen", fs);
+      videoFullscreenBtn.setAttribute("aria-label", fs ? "Exit full screen" : "Enter full screen");
+      videoFullscreenBtn.setAttribute("title", fs ? "Exit full screen (Esc)" : "Full screen");
+      videoFullscreenBtn.setAttribute("aria-pressed", fs ? "true" : "false");
+    }
+
+    function exitVideoFullscreenIfActive() {
+      if (!videoStage || videoFullscreenElement() !== videoStage) return;
+      const p = document.exitFullscreen?.() || document.webkitExitFullscreen?.() || document.msExitFullscreen?.();
+      if (p && typeof p.then === "function") p.catch(() => {});
+    }
+
+    async function toggleVideoFullscreen() {
+      if (!videoStage) return;
+      try {
+        if (videoFullscreenElement() === videoStage) {
+          if (document.exitFullscreen) await document.exitFullscreen();
+          else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
+          else if (document.msExitFullscreen) await document.msExitFullscreen();
+        } else {
+          if (videoStage.requestFullscreen) await videoStage.requestFullscreen();
+          else if (videoStage.webkitRequestFullscreen) await videoStage.webkitRequestFullscreen();
+          else if (videoStage.msRequestFullscreen) await videoStage.msRequestFullscreen();
+        }
+      } catch {
+        /* gesture or feature blocked */
+      }
+      syncVideoFullscreenButton();
+    }
 
     async function postSettingsMerge(patch) {
       const res = await fetch("/api/hmi-settings", {
@@ -566,6 +1015,118 @@
         throw new Error(data.error || text || `HTTP ${res.status}`);
       }
       return data;
+    }
+
+    async function loadVideoProfiles() {
+      let list = STATIC_VIDEO_PROFILES;
+      try {
+        const r = await fetch("/api/video/profiles", { cache: "no-store" });
+        if (r.ok) {
+          const data = await r.json();
+          if (Array.isArray(data.profiles) && data.profiles.length) list = data.profiles;
+        }
+      } catch {
+        /* use fallback list */
+      }
+      fillVideoProfileSelect(list);
+    }
+
+    function stopVideoPreview() {
+      videoStreamActive = false;
+      if (videoConnectTimer) {
+        clearTimeout(videoConnectTimer);
+        videoConnectTimer = null;
+      }
+      exitVideoFullscreenIfActive();
+      if (videoMjpeg) {
+        videoMjpeg.removeAttribute("src");
+        videoMjpeg.setAttribute("hidden", "");
+      }
+      if (videoStage) videoStage.classList.remove("has-frame");
+      if (videoStatus) {
+        videoStatus.textContent = "No stream";
+      }
+      if (videoStopPreview) videoStopPreview.disabled = true;
+      if (videoStartPreview) videoStartPreview.disabled = false;
+      if (videoFullscreenBtn) {
+        videoFullscreenBtn.disabled = true;
+        syncVideoFullscreenButton();
+      }
+    }
+
+    async function fetchVideoReady(profileId) {
+      const id = encodeURIComponent(profileId || DEFAULT_VIDEO_PROFILE);
+      const r = await fetch("/api/video/ready?profile=" + id, { cache: "no-store" });
+      let data = {};
+      try {
+        data = await r.json();
+      } catch {
+        data = {};
+      }
+      return { ok: r.ok && data.ok === true, data };
+    }
+
+    async function startVideoPreview() {
+      if (!videoMjpeg || !videoStatus) return;
+      if (videoStreamActive) stopVideoPreview();
+      const id = getSelectedVideoProfileId();
+      if (!id) {
+        videoStatus.textContent = "Choose a camera model first.";
+        return;
+      }
+      videoCameraProfile = id;
+      videoStatus.textContent = "Checking camera…";
+      let ready;
+      try {
+        ready = await fetchVideoReady(id);
+      } catch {
+        ready = { ok: false, data: { reason: "Could not reach video service." } };
+      }
+      if (!ready.ok) {
+        let msg =
+          (ready.data && (ready.data.reason || ready.data.error)) ||
+          "Camera not ready or video service is down.";
+        if (
+          (id === "pi_cam2" || id === "pi_cam3") &&
+          /no V4L2|not found|autodetect|video service/i.test(String(msg))
+        ) {
+          msg =
+            "MIPI camera not detected. Check the camera cable and that the Pi sees it (rp1-cfe in v4l2-ctl --list-devices), then try Start live stream again.";
+        }
+        videoStatus.textContent = String(msg);
+        if (videoStage) videoStage.classList.remove("has-frame");
+        if (videoFullscreenBtn) videoFullscreenBtn.disabled = true;
+        return;
+      }
+      videoStreamActive = true;
+      if (videoStage) videoStage.classList.remove("has-frame");
+      videoStatus.textContent = "Connecting (MIPI can take 15–20s the first time)…";
+      videoMjpeg.alt = "Live camera (" + id + ")";
+      videoMjpeg.removeAttribute("hidden");
+      if (videoConnectTimer) clearTimeout(videoConnectTimer);
+      videoConnectTimer = setTimeout(() => {
+        if (!videoStreamActive || !videoStatus) return;
+        if (videoStage && videoStage.classList.contains("has-frame")) return;
+        videoStatus.textContent =
+          "Stream timed out starting the camera (MIPI can take 10–20s the first time). Stop, wait a few seconds, then Start again.";
+      }, 45000);
+      videoMjpeg.src = "/api/video/stream?profile=" + encodeURIComponent(id) + "&t=" + Date.now();
+      if (videoStopPreview) videoStopPreview.disabled = false;
+      if (videoStartPreview) videoStartPreview.disabled = true;
+      if (videoFullscreenBtn) videoFullscreenBtn.disabled = false;
+    }
+
+    function refreshVideoStream() {
+      if (!videoStreamActive) return;
+      if (!videoMjpeg || !videoStage || !videoStatus) return;
+      const id = getSelectedVideoProfileId();
+      if (!id) return;
+      videoCameraProfile = id;
+      videoStage.classList.remove("has-frame");
+      videoStatus.textContent = "Connecting (MIPI can take 15–20s the first time)…";
+      videoMjpeg.alt = "Live camera (" + id + ")";
+      videoMjpeg.removeAttribute("hidden");
+      videoMjpeg.src = "/api/video/stream?profile=" + encodeURIComponent(id) + "&t=" + Date.now();
     }
 
     function loadBgFromStorage() {
@@ -696,28 +1257,62 @@
 
     function buildNetplanYaml() {
       const f = collectNetForm();
-      const iface = f.iface || "eth0";
-      const prefix = netmaskToPrefix(f.netmask || "255.255.255.0");
-      const cidr =
-        f.ip && f.netmask ? `${f.ip}/${prefix}` : `${f.ip || "192.168.1.50"}/${prefix || 24}`;
-      const gw = f.gateway || "192.168.1.1";
-      const wireless = /^wl/.test(iface);
-      if (wireless) {
-        const ssid = (f.wifiSsid || "").trim();
-        const psk = (f.wifiPsk || "").trim();
-        const apKey = JSON.stringify(ssid || "YOUR_WIFI_NAME");
-        const apPass = JSON.stringify(psk || "YOUR_WIFI_PASSWORD");
-        return (
-          `# Network (from HMI)\n` +
-          `network:\n  version: 2\n  wifis:\n    ${iface}:\n      dhcp4: false\n` +
-          `      addresses:\n        - ${cidr}\n      routes:\n        - to: default\n          via: ${gw}\n` +
-          `      access-points:\n        ${apKey}:\n          password: ${apPass}\n`
-        );
+      const net = lastMetrics && lastMetrics.network ? lastMetrics.network : {};
+      const lines = ["# Network (from HMI)", "network:", "  version: 2"];
+      const ethYaml = buildEthernetNetplan(f.lan);
+      const wifiIp = (f.wifi.ip || "").trim();
+      let wifiYaml = "";
+      if (wifiIp) {
+        wifiYaml = buildWifiNetplan(f.wifi);
+      } else if (shouldPreserveWifiDhcp(net)) {
+        wifiYaml = buildWifiDhcpPreserveNetplan(f.wifi, net);
       }
+      if (ethYaml) lines.push(ethYaml);
+      if (wifiYaml) lines.push(wifiYaml);
+      return lines.join("\n") + "\n";
+    }
+
+    function shouldPreserveWifiDhcp(net) {
+      const wifiRow = findNetworkIfaceRow(net, "wifi");
+      return !!(net.wifi_ipv4 || ifaceIsActive(wifiRow, net.wifi_ipv4));
+    }
+
+    function buildWifiDhcpPreserveNetplan(wifi, net) {
+      const wifiRow = findNetworkIfaceRow(net, "wifi");
+      const iface = wifi.iface || (wifiRow && wifiRow.name) || "wlan0";
+      return `  wifis:\n    ${iface}:\n      dhcp4: true\n`;
+    }
+
+    function buildEthernetNetplan(lan) {
+      const ip = (lan.ip || "").trim();
+      if (!ip) return "";
+      const iface = lan.iface || "eth0";
+      const prefix = netmaskToPrefix(lan.netmask || "255.255.255.0");
+      const cidr = `${ip}/${prefix}`;
+      const gw = (lan.gateway || "").trim() || "192.168.0.1";
       return (
-        `# Network (from HMI)\n` +
-        `network:\n  version: 2\n  ethernets:\n    ${iface}:\n      dhcp4: false\n` +
-        `      addresses:\n        - ${cidr}\n      routes:\n        - to: default\n          via: ${gw}\n`
+        `  ethernets:\n    ${iface}:\n      dhcp4: false\n` +
+        `      addresses:\n        - ${cidr}\n` +
+        `      routes:\n        - to: default\n          via: ${gw}\n          metric: 100\n`
+      );
+    }
+
+    function buildWifiNetplan(wifi) {
+      const ip = (wifi.ip || "").trim();
+      if (!ip) return "";
+      const iface = wifi.iface || "wlan0";
+      const prefix = netmaskToPrefix(wifi.netmask || "255.255.255.0");
+      const cidr = `${ip}/${prefix}`;
+      const gw = (wifi.gateway || "").trim() || "192.168.0.1";
+      const ssid = (wifi.ssid || "").trim();
+      const psk = (wifi.psk || "").trim();
+      const apKey = JSON.stringify(ssid || "YOUR_WIFI_NAME");
+      const apPass = JSON.stringify(psk || "YOUR_WIFI_PASSWORD");
+      return (
+        `  wifis:\n    ${iface}:\n      dhcp4: false\n` +
+        `      addresses:\n        - ${cidr}\n` +
+        `      routes:\n        - to: default\n          via: ${gw}\n          metric: 600\n` +
+        `      access-points:\n        ${apKey}:\n          password: ${apPass}\n`
       );
     }
 
@@ -739,8 +1334,14 @@
         return;
       }
       const f = collectNetForm();
-      if (/^wl/.test(f.iface || "") && (!(f.wifiSsid || "").trim() || !(f.wifiPsk || "").trim())) {
-        networkApplyStatus.textContent = "Wi-Fi needs a network name and password for a static wireless IP.";
+      const hasLan = !!(f.lan.ip || "").trim();
+      const hasWifi = !!(f.wifi.ip || "").trim();
+      if (!hasLan && !hasWifi) {
+        networkApplyStatus.textContent = "Enter at least an Ethernet or Wi-Fi IP address.";
+        return;
+      }
+      if (hasWifi && (!(f.wifi.ssid || "").trim() || !(f.wifi.psk || "").trim())) {
+        networkApplyStatus.textContent = "Wi-Fi needs a network name and password when a wireless IP is set.";
         return;
       }
       const netplanYaml = buildNetplanYaml();
@@ -762,12 +1363,10 @@
         setNetworkApplyButtonState("done");
         if (applyResult.rebootScheduled === true) {
           networkApplyStatus.textContent =
-            "Netplan applied. This Pi will reboot in a few seconds — the page will stop responding until it is back.";
-        } else if (applyResult.rebootScheduled === false) {
-          networkApplyStatus.textContent =
-            "Network saved and applied on this Pi (reboot after apply is turned off on the server).";
+            "Netplan applied. This Pi will reboot shortly — the page will stop responding until it is back.";
         } else {
-          networkApplyStatus.textContent = "Network saved and applied on this Pi.";
+          networkApplyStatus.textContent =
+            "Network saved and applied on this Pi. The HMI stays up — refresh if readings pause briefly.";
         }
       } catch (e) {
         setNetworkApplyButtonState("error");
@@ -898,9 +1497,15 @@
         btn.classList.add("network-apply--working");
         btn.textContent = "Applying…";
       } else if (phase === "done") {
-        btn.disabled = true;
+        btn.disabled = false;
         btn.classList.add("network-apply--done");
-        btn.textContent = "Applied — rebooting…";
+        btn.textContent = "Applied";
+        window.setTimeout(() => {
+          if (!networkApply) return;
+          networkApply.classList.remove("network-apply--done");
+          networkApply.classList.add("primary");
+          networkApply.textContent = "Apply network";
+        }, 4000);
       } else if (phase === "error") {
         btn.disabled = false;
         btn.classList.add("primary", "network-apply--error");
@@ -965,11 +1570,114 @@
       return parts.join(" ");
     }
 
+    function emptyNetworkSection(kind) {
+      return kind === "wifi"
+        ? { iface: "wlan0", ip: "", netmask: "255.255.255.0", gateway: "", ssid: "", psk: "" }
+        : { iface: "eth0", ip: "", netmask: "255.255.255.0", gateway: "" };
+    }
+
+    function emptyNetworkDraft() {
+      return { lan: emptyNetworkSection("lan"), wifi: emptyNetworkSection("wifi") };
+    }
+
+    function classifyNetworkIface(name) {
+      const n = String(name || "").toLowerCase();
+      if (/^wl/.test(n)) return "wifi";
+      if (/^(eth|en|end|usb)/.test(n)) return "lan";
+      return "other";
+    }
+
+    function ifaceLinkScore(row) {
+      if (!row) return 9;
+      const up = row.operstate === "up" || row.carrier === true;
+      return up ? 0 : 1;
+    }
+
+    function findNetworkIfaceRow(net, kind) {
+      const rows = Array.isArray(net && net.interfaces) ? net.interfaces : [];
+      const matches = rows.filter((row) => classifyNetworkIface(row.name) === kind);
+      matches.sort((a, b) => {
+        const sa = ifaceLinkScore(a);
+        const sb = ifaceLinkScore(b);
+        if (sa !== sb) return sa - sb;
+        return String(a.name || "").localeCompare(String(b.name || ""));
+      });
+      return matches[0] || null;
+    }
+
+    function guessLanIfaceName(net) {
+      const hint = net && net.static_iface_hint;
+      if (hint && classifyNetworkIface(hint) === "lan") return String(hint);
+      const row = findNetworkIfaceRow(net, "lan");
+      return row && row.name ? row.name : "eth0";
+    }
+
+    function guessWifiIfaceName(net) {
+      const row = findNetworkIfaceRow(net, "wifi");
+      return row && row.name ? row.name : "wlan0";
+    }
+
+    function ifaceIsActive(row, ipv4Hint) {
+      if (row && (row.operstate === "up" || row.carrier === true)) return true;
+      return !!(ipv4Hint || (row && row.ipv4));
+    }
+
+    function normalizeNetworkDraft(raw) {
+      const empty = emptyNetworkDraft();
+      if (!raw || typeof raw !== "object") return empty;
+      if (raw.lan || raw.wifi) {
+        return {
+          lan: { ...empty.lan, ...(raw.lan || {}) },
+          wifi: { ...empty.wifi, ...(raw.wifi || {}) },
+        };
+      }
+      const legacyIface = raw.iface || "eth0";
+      const legacy = {
+        ip: raw.ip || "",
+        netmask: raw.netmask || (raw.prefix ? prefixToNetmask(raw.prefix) : "255.255.255.0"),
+        gateway: raw.gateway || "",
+      };
+      if (classifyNetworkIface(legacyIface) === "wifi") {
+        return {
+          lan: empty.lan,
+          wifi: {
+            ...empty.wifi,
+            iface: legacyIface,
+            ...legacy,
+            ssid: raw.wifiSsid || raw.ssid || "",
+            psk: raw.wifiPsk || raw.psk || "",
+          },
+        };
+      }
+      return {
+        lan: { ...empty.lan, iface: legacyIface, ...legacy },
+        wifi: {
+          ...empty.wifi,
+          ssid: raw.wifiSsid || raw.ssid || "",
+          psk: raw.wifiPsk || raw.psk || "",
+        },
+      };
+    }
+
+    function mergeNetworkDraft(cur, incoming) {
+      const a = normalizeNetworkDraft(cur);
+      const b = normalizeNetworkDraft(incoming);
+      return {
+        lan: { ...a.lan, ...b.lan },
+        wifi: { ...a.wifi, ...b.wifi },
+      };
+    }
+
     function loadNetDraft() {
       try {
-        return JSON.parse(localStorage.getItem(LS_NET) || "{}");
+        let raw = JSON.parse(localStorage.getItem(LS_NET) || "{}");
+        if (!raw.lan && !raw.wifi && !raw.ip) {
+          const legacy = JSON.parse(localStorage.getItem("hmi_network_draft_v2") || "{}");
+          if (legacy && (legacy.ip || legacy.iface || legacy.wifiSsid)) raw = legacy;
+        }
+        return normalizeNetworkDraft(raw);
       } catch {
-        return {};
+        return emptyNetworkDraft();
       }
     }
 
@@ -1009,24 +1717,97 @@
       return [24, 16, 8, 0].map((s) => (mask >> s) & 255).join(".");
     }
 
+    function setNetworkFormValues(lan, wifi) {
+      document.getElementById("nf-lan-ip").value = lan.ip || "";
+      document.getElementById("nf-lan-netmask").value = lan.netmask || "255.255.255.0";
+      document.getElementById("nf-lan-gw").value = lan.gateway || "";
+      document.getElementById("nf-wifi-ip").value = wifi.ip || "";
+      document.getElementById("nf-wifi-netmask").value = wifi.netmask || "255.255.255.0";
+      document.getElementById("nf-wifi-gw").value = wifi.gateway || "";
+      document.getElementById("nf-wifi-ssid").value = wifi.ssid || "";
+      document.getElementById("nf-wifi-psk").value = wifi.psk || "";
+    }
+
     function collectNetForm() {
+      const draft = loadNetDraft();
+      const net = lastMetrics && lastMetrics.network ? lastMetrics.network : {};
+      const lanRow = findNetworkIfaceRow(net, "lan");
+      const wifiRow = findNetworkIfaceRow(net, "wifi");
       return {
-        iface: netIfaceChosen || "eth0",
-        ip: document.getElementById("nf-ip").value.trim(),
-        netmask: document.getElementById("nf-netmask").value.trim(),
-        gateway: document.getElementById("nf-gw").value.trim(),
-        wifiSsid: document.getElementById("nf-wifi-ssid").value.trim(),
-        wifiPsk: document.getElementById("nf-wifi-psk").value,
+        lan: {
+          iface: (lanRow && lanRow.name) || draft.lan.iface || guessLanIfaceName(net),
+          ip: document.getElementById("nf-lan-ip").value.trim(),
+          netmask: document.getElementById("nf-lan-netmask").value.trim(),
+          gateway: document.getElementById("nf-lan-gw").value.trim(),
+        },
+        wifi: {
+          iface: (wifiRow && wifiRow.name) || draft.wifi.iface || guessWifiIfaceName(net),
+          ip: document.getElementById("nf-wifi-ip").value.trim(),
+          netmask: document.getElementById("nf-wifi-netmask").value.trim(),
+          gateway: document.getElementById("nf-wifi-gw").value.trim(),
+          ssid: document.getElementById("nf-wifi-ssid").value.trim(),
+          psk: document.getElementById("nf-wifi-psk").value,
+        },
       };
     }
 
-    function syncWifiExtraVisibility() {
-      const wrap = document.getElementById("nf-wifi-extra");
-      const iface = netIfaceChosen || "eth0";
-      const show = /^wl/.test(iface);
-      if (!wrap) return;
-      if (show) wrap.removeAttribute("hidden");
-      else wrap.setAttribute("hidden", "");
+    function seedNetworkFormFromDraftAndMetrics() {
+      const d = loadNetDraft();
+      const net = lastMetrics && lastMetrics.network ? lastMetrics.network : {};
+      const dr = net.default_route || {};
+      const lanRow = findNetworkIfaceRow(net, "lan");
+      const wifiRow = findNetworkIfaceRow(net, "wifi");
+      const lan = {
+        iface: d.lan.iface || (lanRow && lanRow.name) || guessLanIfaceName(net),
+        ip: d.lan.ip || net.lan_ipv4 || "",
+        netmask: d.lan.netmask || "255.255.255.0",
+        gateway: d.lan.gateway || dr.gateway || "",
+      };
+      const wifi = {
+        iface: d.wifi.iface || (wifiRow && wifiRow.name) || guessWifiIfaceName(net),
+        ip: d.wifi.ip || net.wifi_ipv4 || "",
+        netmask: d.wifi.netmask || "255.255.255.0",
+        gateway: d.wifi.gateway || dr.gateway || "",
+        ssid: d.wifi.ssid || "",
+        psk: d.wifi.psk || "",
+      };
+      setNetworkFormValues(lan, wifi);
+      persistNetDraftLocal({ lan, wifi });
+    }
+
+    function formatNetworkStatusLine(label, row, ipv4Hint) {
+      const ip = (row && row.ipv4) || ipv4Hint || "";
+      const active = ifaceIsActive(row, ipv4Hint);
+      if (ip) return `${label} ${ip}`;
+      return active ? `${label} active` : `${label} not active`;
+    }
+
+    function formatSettingsIfaceStatus(row, ipv4Hint, fallbackName) {
+      const name = (row && row.name) || fallbackName || "—";
+      const ip = (row && row.ipv4) || ipv4Hint || "";
+      const active = ifaceIsActive(row, ipv4Hint);
+      const stateClass = active ? "state-active" : "state-inactive";
+      const stateText = active ? "active" : "not active";
+      const ipBit = ip ? ` · ${ip}` : "";
+      return `<span>${escHtml(name)}${escHtml(ipBit)} · <span class="${stateClass}">${stateText}</span></span>`;
+    }
+
+    function updateNetworkStatusLabels(net) {
+      const draft = loadNetDraft();
+      const lanRow = findNetworkIfaceRow(net, "lan");
+      const wifiRow = findNetworkIfaceRow(net, "wifi");
+      const lanStatus = document.getElementById("nf-lan-status");
+      const wifiStatus = document.getElementById("nf-wifi-status");
+      if (lanStatus) {
+        lanStatus.innerHTML = lastMetrics
+          ? formatSettingsIfaceStatus(lanRow, net.lan_ipv4, draft.lan.iface || "eth0")
+          : "Live readings not available yet.";
+      }
+      if (wifiStatus) {
+        wifiStatus.innerHTML = lastMetrics
+          ? formatSettingsIfaceStatus(wifiRow, net.wifi_ipv4, draft.wifi.iface || "wlan0")
+          : "Live readings not available yet.";
+      }
     }
 
     function updateNetGenerated() {
@@ -1035,46 +1816,32 @@
     }
 
     function syncNetFormFromMetrics() {
-      const note = document.getElementById("nf-iface-note");
-      const d = loadNetDraft();
-      const legacy = d.prefix && !d.netmask ? prefixToNetmask(d.prefix) : "";
-      if (!lastMetrics) {
-        netIfaceChosen = d.iface || "eth0";
-        if (note) {
-          let t = "Live readings are not in yet — using what you saved.";
-          if (/^wl/.test(netIfaceChosen)) t += " Add Wi-Fi name and password for a static wireless IP.";
-          note.textContent = t;
+      const net = lastMetrics && lastMetrics.network ? lastMetrics.network : {};
+      updateNetworkStatusLabels(net);
+      if (!netFormSeeded) {
+        if (lastMetrics) seedNetworkFormFromDraftAndMetrics();
+        else {
+          const d = loadNetDraft();
+          setNetworkFormValues(d.lan, d.wifi);
         }
-        document.getElementById("nf-ip").value = d.ip || "";
-        document.getElementById("nf-netmask").value = d.netmask || legacy || "255.255.255.0";
-        document.getElementById("nf-gw").value = d.gateway || "";
-        document.getElementById("nf-wifi-ssid").value = d.wifiSsid || "";
-        document.getElementById("nf-wifi-psk").value = d.wifiPsk || "";
-        syncWifiExtraVisibility();
-        updateNetGenerated();
-        return;
+        netFormSeeded = true;
       }
-      const net = lastMetrics.network || {};
-      const dr = net.default_route || {};
-      netIfaceChosen = (dr.iface && String(dr.iface)) || d.iface || "eth0";
-      if (note) {
-        let t = `Using ${netIfaceChosen} as the active interface.`;
-        if (/^wl/.test(netIfaceChosen)) t += " Add Wi-Fi name and password for a static wireless IP.";
-        note.textContent = t;
-      }
-      document.getElementById("nf-ip").value = d.ip || net.primary_ipv4_hint || "";
-      document.getElementById("nf-netmask").value = d.netmask || legacy || "255.255.255.0";
-      document.getElementById("nf-gw").value = d.gateway || dr.gateway || "";
-      document.getElementById("nf-wifi-ssid").value = d.wifiSsid || "";
-      document.getElementById("nf-wifi-psk").value = d.wifiPsk || "";
-      syncWifiExtraVisibility();
-      updateNetGenerated();
     }
 
-    ["nf-ip", "nf-netmask", "nf-gw", "nf-wifi-ssid", "nf-wifi-psk"].forEach((id) => {
+    NETWORK_FIELD_IDS.forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.addEventListener("input", updateNetGenerated);
     });
+
+    function networkStatusValue(net) {
+      const lanRow = findNetworkIfaceRow(net, "lan");
+      const wifiRow = findNetworkIfaceRow(net, "wifi");
+      const parts = [
+        formatNetworkStatusLine("Ethernet", lanRow, net.lan_ipv4),
+        formatNetworkStatusLine("Wi-Fi", wifiRow, net.wifi_ipv4),
+      ];
+      return parts.join(" · ");
+    }
 
     function renderCards(items) {
       return items
@@ -1130,10 +1897,10 @@
         });
       }
 
-      if (net && (net.default_route || net.primary_ipv4_hint)) {
+      if (net && (Array.isArray(net.interfaces) || net.lan_ipv4 || net.wifi_ipv4 || net.default_route)) {
         statusItems.push({
           title: "Network",
-          value: net.primary_ipv4_hint || "—",
+          value: networkStatusValue(net),
           sub: routeBits || "This Pi",
         });
       }
@@ -1238,12 +2005,21 @@
         }
       }
       if (srv.networkDraft && typeof srv.networkDraft === "object") {
-        const cur = loadNetDraft();
+        const merged = mergeNetworkDraft(loadNetDraft(), srv.networkDraft);
         try {
-          localStorage.setItem(LS_NET, JSON.stringify({ ...cur, ...srv.networkDraft }));
+          localStorage.setItem(LS_NET, JSON.stringify(merged));
         } catch {
           /* ignore */
         }
+        netFormSeeded = false;
+      }
+      if (typeof srv.videoCameraProfile === "string" && srv.videoCameraProfile.trim()) {
+        videoCameraProfile = srv.videoCameraProfile.trim();
+      }
+      try {
+        await loadVideoProfiles();
+      } catch {
+        fillVideoProfileSelect(STATIC_VIDEO_PROFILES);
       }
       syncNetFormFromMetrics();
       refreshNetworkGate();
@@ -1269,11 +2045,104 @@
           if (bgDim) bgDim.value = String(lastBgState.overlayOpacity ?? 0.68);
         }
       }
+      if (name === "video") {
+        stopVideoPreview();
+        loadVideoProfiles().then(() => {
+          if (videoStatus) {
+            videoStatus.textContent = "No stream";
+          }
+        });
+      }
     }
 
     document.querySelectorAll(".tab-btn").forEach((btn) => {
       btn.addEventListener("click", () => selectTab(btn.dataset.tab));
     });
+
+    async function saveVideoProfileSelection(id) {
+      if (!id) return;
+      videoCameraProfile = id;
+      stopVideoPreview();
+      try {
+        await postSettingsMerge({ videoCameraProfile: id });
+      } catch {
+        /* ignore — selection still applies locally */
+      }
+      if (videoStatus) {
+        videoStatus.textContent = "Camera saved.";
+      }
+    }
+
+    if (videoInterfaceSelect) {
+      videoInterfaceSelect.addEventListener("change", () => {
+        const iface = videoInterfaceSelect.value;
+        const picked = fillVideoCameraSelect(videoProfilesCache, iface, videoCameraProfile);
+        if (picked) void saveVideoProfileSelection(picked);
+        else if (videoStatus) videoStatus.textContent = "No cameras configured for this interface.";
+      });
+    }
+    if (videoCameraSelect) {
+      videoCameraSelect.addEventListener("change", () => {
+        const id = videoCameraSelect.value;
+        if (id) void saveVideoProfileSelection(id);
+      });
+    }
+    if (videoStartPreview) {
+      videoStartPreview.addEventListener("click", () => {
+        startVideoPreview();
+      });
+    }
+    if (videoStopPreview) {
+      videoStopPreview.addEventListener("click", () => {
+        stopVideoPreview();
+      });
+    }
+    if (videoFullscreenBtn) {
+      videoFullscreenBtn.addEventListener("click", () => {
+        toggleVideoFullscreen();
+      });
+    }
+    document.addEventListener("fullscreenchange", syncVideoFullscreenButton);
+    document.addEventListener("webkitfullscreenchange", syncVideoFullscreenButton);
+    document.addEventListener("MSFullscreenChange", syncVideoFullscreenButton);
+    if (videoMjpeg) {
+      videoMjpeg.addEventListener("load", () => {
+        if (!videoStreamActive) return;
+        if (videoConnectTimer) {
+          clearTimeout(videoConnectTimer);
+          videoConnectTimer = null;
+        }
+        if (videoStage) videoStage.classList.add("has-frame");
+        if (videoStatus) videoStatus.textContent = "";
+      });
+      videoMjpeg.addEventListener("dblclick", () => {
+        if (videoFullscreenElement() === videoStage) {
+          void toggleVideoFullscreen();
+          return;
+        }
+        if (!videoStreamActive || !videoStage || !videoStage.classList.contains("has-frame")) return;
+        void toggleVideoFullscreen();
+      });
+      videoMjpeg.addEventListener("error", () => {
+        videoStreamActive = false;
+        if (videoConnectTimer) {
+          clearTimeout(videoConnectTimer);
+          videoConnectTimer = null;
+        }
+        exitVideoFullscreenIfActive();
+        if (videoStage) videoStage.classList.remove("has-frame");
+        if (videoStatus) {
+          videoStatus.textContent =
+            "Stream error — press Start to retry.";
+        }
+        if (videoStopPreview) videoStopPreview.disabled = true;
+        if (videoStartPreview) videoStartPreview.disabled = false;
+        if (videoFullscreenBtn) {
+          videoFullscreenBtn.disabled = true;
+          syncVideoFullscreenButton();
+        }
+      });
+    }
 
     initHostMeta()
       .then(() => hydrateFromServer())
