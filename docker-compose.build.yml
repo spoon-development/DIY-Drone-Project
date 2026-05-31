@@ -16,3 +16,11 @@ services:
   video:
     build:
       context: ./services/video
+
+  mavrouter:
+    build:
+      context: ./services/mavrouter
+
+  telemetry:
+    build:
+      context: ./services/telemetry

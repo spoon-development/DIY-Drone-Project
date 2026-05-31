@@ -15,8 +15,14 @@ skip_image_pull: true
 # Optional: published HMI port on the host (default 8080 if omitted).
 # hmi_host_port: 8080
 
-# Compose profiles (comma-separated). "video" starts the camera stack; omit to run stats + HMI only.
-compose_profiles: video
+# Compose profiles (comma-separated). "video" starts the camera stack; "fc" starts mavlink-router + telemetry.
+compose_profiles: video,fc
+
+# Flight controller UART (SpeedyBee F405 v4 over Pi serial, MAVLink2). Override per board if needed.
+fc_serial_device: /dev/ttyAMA0
+fc_serial_baud: 921600
+# ArduPilot SR{N}_* port index for the Pi UART (often 1 = TELEM1, not 0 = USB).
+fc_mavlink_sr_port: 1
 
 # MIPI boot config (imx708 overlay in /boot/firmware/config.txt) — OFF by default.
 # Deploy only ships containers; it does not edit Pi firmware. CSI cameras need a one-time

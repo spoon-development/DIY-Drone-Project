@@ -49,6 +49,8 @@ A minimal Docker stack for **Raspberry Pi** (and similar ARM boards): a **stats*
 
 **Video (optional):** enable Compose profile **`video`** via `compose_profiles: video` in [`deploy/config/stack.yml`](deploy/config/stack.yml). The container is **privileged** (no fixed `devices:`) so **`docker compose up` still succeeds** without a camera plugged in. The HMI **Video** tab does **not** auto-start — use **Start live stream** after the camera is connected (the UI calls **`/api/video/ready`** first). MIPI boot config is manual on the Pi (`mipi_camera_configure: false` in stack.yml).
 
+**Flight controller (optional):** enable Compose profile **`fc`** (e.g. `compose_profiles: video,fc`). **`mavlink-router`** bridges the FC UART (**MAVLink2**, default **921600** baud on **`/dev/ttyAMA0`**) to UDP; **`telemetry`** decodes MAVLink for the HMI **Flight Controller** tab (`/api/telemetry`, baud/device apply via `/api/telemetry/config`). Set **`fc_serial_device`** / **`fc_serial_baud`** in [`deploy/config/stack.yml`](deploy/config/stack.yml).
+
 ## Standard process when you change code
 
 The Pi runs **images from GHCR**, not your laptop’s source tree. If you changed anything that ships **inside** an image (**`services/stats`**, **`services/hmi`**, **`services/video`**, Dockerfiles) or you need the Pi on a **new image tag**, always do **push then deploy** in that order.

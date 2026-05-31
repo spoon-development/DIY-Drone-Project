@@ -107,7 +107,7 @@ if [[ -n "$ONLY_ARG" ]]; then
 fi
 
 if [[ ${#SERVICES[@]} -eq 0 ]]; then
-  SERVICES=(stats hmi video)
+  SERVICES=(stats hmi video mavrouter telemetry)
 fi
 
 [[ -f "$CFG" ]] || {
@@ -143,8 +143,10 @@ image_for() {
     stats) echo "${registry}/dronebros-stats:${tag}" ;;
     hmi) echo "${registry}/dronebros-hmi:${tag}" ;;
     video) echo "${registry}/dronebros-video:${tag}" ;;
+    mavrouter) echo "${registry}/dronebros-mavrouter:${tag}" ;;
+    telemetry) echo "${registry}/dronebros-telemetry:${tag}" ;;
     *)
-      echo "[push] unknown service: $1 (expected stats, hmi, or video)" >&2
+      echo "[push] unknown service: $1 (expected stats, hmi, video, mavrouter, or telemetry)" >&2
       exit 2
       ;;
   esac
@@ -152,7 +154,7 @@ image_for() {
 
 context_for() {
   case "$1" in
-    stats|hmi|video) echo "${ROOT}/services/$1" ;;
+    stats|hmi|video|mavrouter|telemetry) echo "${ROOT}/services/$1" ;;
     *)
       echo "[push] unknown service: $1" >&2
       exit 2
@@ -162,7 +164,7 @@ context_for() {
 
 for svc in "${SERVICES[@]}"; do
   case "$svc" in
-    stats|hmi|video) ;;
+    stats|hmi|video|mavrouter|telemetry) ;;
     *)
       echo "[push] unknown service in list: $svc" >&2
       exit 2

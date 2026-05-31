@@ -264,6 +264,39 @@ bool fetch_video_upstream_path(const ParsedUrl& base, const std::string& path_qu
   return true;
 }
 
+ParsedUrl telemetry_service_base_url() {
+  const std::string raw = getenv_or("TELEMETRY_SERVICE_URL", "http://telemetry:9102");
+  ParsedUrl pu;
+  if (!parse_http_url(raw, pu)) {
+    pu.host = "telemetry";
+    pu.port = 9102;
+    pu.path = "/";
+  }
+  return pu;
+}
+
+bool fetch_telemetry_upstream(const ParsedUrl& base, const std::string& path_query, int timeout_sec, int& status,
+                              std::string& body, std::string& content_type) {
+  return fetch_video_upstream_path(base, path_query, timeout_sec, status, body, content_type);
+}
+
+bool valid_serial_device(const std::string& s) {
+  if (s.rfind("/dev/", 0) != 0 || s.size() < 6 || s.size() > 128) return false;
+  for (unsigned char c : s) {
+    if (std::isalnum(c) != 0 || c == '/' || c == '_' || c == '-' || c == '.') continue;
+    return false;
+  }
+  return true;
+}
+
+bool valid_serial_baud(int baud) {
+  static const int kRates[] = {9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600};
+  for (int r : kRates) {
+    if (r == baud) return true;
+  }
+  return false;
+}
+
 struct MjpegBridge {
   std::mutex mu;
   std::condition_variable cv;
@@ -392,6 +425,17 @@ int main() {
     if (incoming.contains("netplanYaml")) cur["netplanYaml"] = incoming["netplanYaml"];
     if (incoming.contains("videoCameraProfile") && incoming["videoCameraProfile"].is_string())
       cur["videoCameraProfile"] = incoming["videoCameraProfile"];
+    if (incoming.contains("fcSerialDevice") && incoming["fcSerialDevice"].is_string())
+      cur["fcSerialDevice"] = incoming["fcSerialDevice"];
+    if (incoming.contains("fcSerialBaud") && incoming["fcSerialBaud"].is_number_integer())
+      cur["fcSerialBaud"] = incoming["fcSerialBaud"];
+    if (incoming.contains("fcCardLayout") && incoming["fcCardLayout"].is_array()) {
+      json layout = json::array();
+      for (const auto& item : incoming["fcCardLayout"]) {
+        if (item.is_string()) layout.push_back(item.get<std::string>());
+      }
+      cur["fcCardLayout"] = std::move(layout);
+    }
     if (!write_settings_atomic(cur)) {
       res.status = 500;
       res.set_content("cannot write settings", "text/plain; charset=utf-8");
@@ -565,6 +609,117 @@ int main() {
           bridge->cv.notify_all();
           if (bridge->th.joinable()) bridge->th.join();
         });
+  });
+
+  const int telemetry_fetch_timeout = [] {
+    try {
+      return static_cast<int>(std::lround(std::stod(getenv_or("TELEMETRY_FETCH_TIMEOUT", "8"))));
+    } catch (...) {
+      return 8;
+    }
+  }();
+
+  svr.Get("/api/telemetry", [&](const httplib::Request&, httplib::Response& res) {
+    const ParsedUrl tbase = telemetry_service_base_url();
+    int st = 0;
+    std::string body;
+    std::string ct;
+    if (!fetch_telemetry_upstream(tbase, "/api/telemetry", telemetry_fetch_timeout, st, body, ct)) {
+      json j = {{"error", "telemetry service unreachable"}, {"connected", false}};
+      res.status = 502;
+      res.set_content(j.dump(), "application/json; charset=utf-8");
+      return;
+    }
+    auto semi = ct.find(';');
+    std::string main_type = semi == std::string::npos ? ct : ct.substr(0, semi);
+    trim_inplace(main_type);
+    if (main_type.empty()) main_type = "application/json";
+    res.status = st;
+    res.set_content(body, main_type.c_str());
+    res.set_header("Cache-Control", "no-store");
+  });
+
+  svr.Get("/api/telemetry/config", [&](const httplib::Request&, httplib::Response& res) {
+    const ParsedUrl tbase = telemetry_service_base_url();
+    int st = 0;
+    std::string body;
+    std::string ct;
+    if (!fetch_telemetry_upstream(tbase, "/api/config", telemetry_fetch_timeout, st, body, ct)) {
+      json j = {{"error", "telemetry service unreachable"}};
+      res.status = 502;
+      res.set_content(j.dump(), "application/json; charset=utf-8");
+      return;
+    }
+    auto semi = ct.find(';');
+    std::string main_type = semi == std::string::npos ? ct : ct.substr(0, semi);
+    trim_inplace(main_type);
+    if (main_type.empty()) main_type = "application/json";
+    res.status = st;
+    res.set_content(body, main_type.c_str());
+    res.set_header("Cache-Control", "no-store");
+  });
+
+  svr.Post("/api/telemetry/config", [&](const httplib::Request& req, httplib::Response& res) {
+    json incoming;
+    try {
+      incoming = json::parse(req.body);
+    } catch (...) {
+      res.status = 400;
+      res.set_content(R"({"ok":false,"error":"invalid JSON"})", "application/json; charset=utf-8");
+      return;
+    }
+    json upstream = json::object();
+    if (incoming.contains("device") && incoming["device"].is_string()) {
+      const std::string dev = incoming["device"].get<std::string>();
+      if (!valid_serial_device(dev)) {
+        res.status = 400;
+        res.set_content(R"({"ok":false,"error":"invalid serial device path"})", "application/json; charset=utf-8");
+        return;
+      }
+      upstream["device"] = dev;
+    }
+    if (incoming.contains("baud")) {
+      if (!incoming["baud"].is_number_integer()) {
+        res.status = 400;
+        res.set_content(R"({"ok":false,"error":"baud must be an integer"})", "application/json; charset=utf-8");
+        return;
+      }
+      const int baud = incoming["baud"].get<int>();
+      if (!valid_serial_baud(baud)) {
+        res.status = 400;
+        res.set_content(R"({"ok":false,"error":"unsupported baud rate"})", "application/json; charset=utf-8");
+        return;
+      }
+      upstream["baud"] = baud;
+    }
+    if (upstream.empty()) {
+      res.status = 400;
+      res.set_content(R"({"ok":false,"error":"provide baud and/or device"})", "application/json; charset=utf-8");
+      return;
+    }
+
+    const ParsedUrl tbase = telemetry_service_base_url();
+    httplib::Client cli(tbase.host, tbase.port);
+    cli.set_read_timeout(telemetry_fetch_timeout, 0);
+    cli.set_connection_timeout(3, 0);
+    auto upstream_res = cli.Post("/api/config", upstream.dump(), "application/json; charset=utf-8");
+    if (!upstream_res) {
+      json j = {{"ok", false}, {"error", "telemetry service unreachable"}};
+      res.status = 502;
+      res.set_content(j.dump(), "application/json; charset=utf-8");
+      return;
+    }
+
+    json cur;
+    if (read_settings(cur)) {
+      if (upstream.contains("device")) cur["fcSerialDevice"] = upstream["device"];
+      if (upstream.contains("baud")) cur["fcSerialBaud"] = upstream["baud"];
+      write_settings_atomic(cur);
+    }
+
+    res.status = upstream_res->status;
+    res.set_content(upstream_res->body, "application/json; charset=utf-8");
+    res.set_header("Cache-Control", "no-store");
   });
 
   auto serve_index = [](const httplib::Request&, httplib::Response& res) {

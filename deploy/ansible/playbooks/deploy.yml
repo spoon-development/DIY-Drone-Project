@@ -138,7 +138,7 @@
 
     - name: Remove stack containers by name (cleanup if project name changed)
       become: false
-      ansible.builtin.shell: docker rm -f dronebros-stats dronebros-hmi dronebros-video 2>/dev/null || true
+      ansible.builtin.shell: docker rm -f dronebros-stats dronebros-hmi dronebros-video dronebros-mavrouter dronebros-telemetry 2>/dev/null || true
       args:
         executable: /bin/bash
       changed_when: false

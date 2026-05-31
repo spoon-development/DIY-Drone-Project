@@ -59,6 +59,61 @@ services:
     environment:
       VIDEO_DEFAULT_PROFILE: ${VIDEO_DEFAULT_PROFILE:-uc60}
 
+  mavrouter:
+    profiles:
+      - fc
+    image: ${IMAGE_REGISTRY:-ghcr.io/spoon-development}/dronebros-mavrouter:${IMAGE_TAG:-latest}
+    container_name: dronebros-mavrouter
+    restart: unless-stopped
+    depends_on:
+      telemetry:
+        condition: service_started
+    # Serial path is configurable (FC_SERIAL_DEVICE / fc_serial_device). Mount /dev instead of
+    # devices: so compose up succeeds when the port is missing or UART is not enabled yet.
+    privileged: true
+    group_add:
+      - dialout
+    volumes:
+      - fc-config:/config
+      - /dev:/dev
+    environment:
+      FC_SERIAL_DEVICE: ${FC_SERIAL_DEVICE:-/dev/ttyAMA0}
+      FC_SERIAL_BAUD: ${FC_SERIAL_BAUD:-921600}
+      FC_TELEMETRY_UDP_HOST: telemetry
+      FC_TELEMETRY_UDP_PORT: "14551"
+    networks:
+      - dronebros
+    logging: *log
+
+  telemetry:
+    profiles:
+      - fc
+    image: ${IMAGE_REGISTRY:-ghcr.io/spoon-development}/dronebros-telemetry:${IMAGE_TAG:-latest}
+    container_name: dronebros-telemetry
+    restart: unless-stopped
+    volumes:
+      - fc-config:/config
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9102/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    networks:
+      - dronebros
+    logging: *log
+    environment:
+      MAVLINK_UDP_PORT: "14551"
+      FC_MAVLINK_SR_PORT: ${FC_MAVLINK_SR_PORT:-1}
+      FC_SR_EXTRA1_HZ: ${FC_SR_EXTRA1_HZ:-10}
+      FC_SR_EXTRA2_HZ: ${FC_SR_EXTRA2_HZ:-5}
+      FC_SR_EXTRA3_HZ: ${FC_SR_EXTRA3_HZ:-5}
+      FC_SR_EXT_STAT_HZ: ${FC_SR_EXT_STAT_HZ:-2}
+      FC_SR_APPLY_ON_CONNECT: ${FC_SR_APPLY_ON_CONNECT:-1}
+      FC_SERIAL_DEVICE: ${FC_SERIAL_DEVICE:-/dev/ttyAMA0}
+      FC_SERIAL_BAUD: ${FC_SERIAL_BAUD:-921600}
+      TELEMETRY_CONFIG_DIR: /config
+
   hmi:
     image: ${IMAGE_REGISTRY:-ghcr.io/spoon-development}/dronebros-hmi:${IMAGE_TAG:-latest}
     container_name: dronebros-hmi
@@ -77,6 +132,7 @@ services:
       # Try service DNS name, then container_name (some Docker/Compose setups differ).
       STATS_METRICS_URLS: http://stats:9101/metrics,http://dronebros-stats:9101/metrics
       VIDEO_SERVICE_URL: http://video:8765
+      TELEMETRY_SERVICE_URL: http://telemetry:9102
       # Network apply runs netplan on the host; do not reboot — keeps HMI reachable over Wi-Fi.
       HMI_REBOOT_AFTER_NETPLAN: "0"
     depends_on:
@@ -90,3 +146,6 @@ services:
 networks:
   dronebros:
     driver: bridge
+
+volumes:
+  fc-config:

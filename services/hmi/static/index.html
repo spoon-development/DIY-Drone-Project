@@ -584,6 +584,176 @@
     .video-fs-btn.is-fullscreen .video-fs-exit {
       display: block !important;
     }
+    .fc-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+    .fc-grid .metric {
+      font-size: 1.35rem;
+    }
+    .fc-link-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.72rem;
+      font-weight: 650;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0.18rem 0.55rem;
+      border-radius: 999px;
+      border: 1px solid var(--card-border);
+      margin-bottom: 0.55rem;
+    }
+    .fc-link-pill.live {
+      color: var(--good);
+      border-color: rgba(74, 222, 128, 0.35);
+      background: rgba(74, 222, 128, 0.1);
+    }
+    .fc-link-pill.wait {
+      color: var(--warn);
+      border-color: rgba(251, 191, 36, 0.35);
+      background: rgba(251, 191, 36, 0.08);
+    }
+    .fc-link-pill.err {
+      color: var(--bad);
+      border-color: rgba(248, 113, 113, 0.35);
+      background: rgba(248, 113, 113, 0.08);
+    }
+    .fc-att-lines {
+      display: grid;
+      gap: 0.45rem;
+      font-variant-numeric: tabular-nums;
+    }
+    .fc-att-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 1rem;
+      font-size: 1.05rem;
+      line-height: 1.35;
+    }
+    .fc-att-row span:first-child {
+      font-size: 0.72rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 650;
+    }
+    .fc-att-row span:last-child {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .fc-serial-card {
+      max-width: 36rem;
+    }
+    .fc-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 0.85rem;
+    }
+    .fc-card {
+      position: relative;
+    }
+    .fc-card-remove {
+      position: absolute;
+      top: 0.55rem;
+      right: 0.55rem;
+      width: 1.65rem;
+      height: 1.65rem;
+      border: 1px solid var(--card-border);
+      border-radius: 0.4rem;
+      background: rgba(0, 0, 0, 0.25);
+      color: var(--muted);
+      font-size: 1.1rem;
+      line-height: 1;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+    .fc-card:hover .fc-card-remove,
+    .fc-card-remove:focus-visible {
+      opacity: 1;
+    }
+    .fc-card-remove:hover {
+      color: var(--bad);
+      border-color: rgba(248, 113, 113, 0.45);
+    }
+    .fc-dlg {
+      border: 1px solid var(--card-border);
+      border-radius: 0.85rem;
+      padding: 0;
+      max-width: 28rem;
+      width: calc(100% - 2rem);
+      background: rgba(12, 16, 24, 0.96);
+      color: var(--text);
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+    }
+    .fc-dlg::backdrop {
+      background: rgba(0, 0, 0, 0.55);
+    }
+    .fc-dlg-inner {
+      padding: 1.25rem 1.35rem 1.4rem;
+      margin: 0;
+    }
+    .fc-dlg h2 {
+      margin: 0 0 0.35rem;
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+    .fc-add-search {
+      width: 100%;
+      margin: 0.75rem 0 0.65rem;
+      padding: 0.55rem 0.65rem;
+      border-radius: 0.45rem;
+      border: 1px solid var(--card-border);
+      background: rgba(0, 0, 0, 0.22);
+      color: var(--text);
+      font: inherit;
+    }
+    .fc-add-list {
+      display: grid;
+      gap: 0.35rem;
+      max-height: min(50vh, 22rem);
+      overflow: auto;
+      margin-bottom: 0.75rem;
+    }
+    .fc-add-group {
+      margin-top: 0.5rem;
+    }
+    .fc-add-group h3 {
+      margin: 0 0 0.35rem;
+      font-size: 0.68rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 650;
+    }
+    .fc-add-item {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 0.55rem 0.65rem;
+      border-radius: 0.45rem;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      font: inherit;
+      cursor: pointer;
+    }
+    .fc-add-item:hover {
+      border-color: var(--card-border);
+      background: rgba(255, 255, 255, 0.07);
+    }
+    .fc-add-item small {
+      display: block;
+      margin-top: 0.15rem;
+      color: var(--muted);
+      font-size: 0.78rem;
+      line-height: 1.35;
+    }
   </style>
 </head>
 <body>
@@ -653,9 +823,45 @@
     </section>
 
     <section id="panel-flight-controller" class="tab-panel" role="tabpanel" aria-labelledby="tab-flight-controller" hidden>
-      <article class="card" style="max-width: 28rem">
-        <h2>Flight Controller</h2>
-        <div class="metric" style="font-size: 1.05rem">No flight controller connected yet.</div>
+      <div class="fc-toolbar">
+        <button type="button" class="secondary" id="fc-add-card">Add card</button>
+        <button type="button" class="secondary" id="fc-reset-cards">Reset cards</button>
+      </div>
+      <div class="fc-grid" id="fc-cards"></div>
+      <dialog id="fc-add-dialog" class="fc-dlg">
+        <div class="fc-dlg-inner">
+          <h2>Add telemetry card</h2>
+          <p class="dlg-lead">Pick a value to show. Remove any card with × on the card corner.</p>
+          <input type="search" id="fc-add-search" class="fc-add-search" placeholder="Search metrics…" autocomplete="off" />
+          <div id="fc-add-list" class="fc-add-list"></div>
+          <div class="dlg-actions">
+            <button type="button" id="fc-add-cancel">Cancel</button>
+          </div>
+        </div>
+      </dialog>
+      <article class="card fc-serial-card" style="margin-top: 1rem">
+        <h2>Serial (mavlink-router)</h2>
+        <p class="settings-hint">SpeedyBee F405 v4 over Pi UART. Changing baud restarts the mavlink-router serial link.</p>
+        <div class="net-grid two">
+          <div class="field">
+            <label for="fc-serial-device">Device</label>
+            <input id="fc-serial-device" type="text" autocomplete="off" placeholder="/dev/ttyAMA0" />
+          </div>
+          <div class="field">
+            <label for="fc-serial-baud">Baud rate</label>
+            <select id="fc-serial-baud" aria-label="Serial baud rate">
+              <option value="57600">57600</option>
+              <option value="115200">115200</option>
+              <option value="230400">230400</option>
+              <option value="460800">460800</option>
+              <option value="921600" selected>921600</option>
+            </select>
+          </div>
+        </div>
+        <p class="sub" id="fc-serial-status" style="min-height: 1.35em; margin-top: 0.75rem" aria-live="polite"></p>
+        <div class="dlg-actions" style="margin-top: 0.35rem">
+          <button type="button" class="primary" id="fc-serial-apply">Apply</button>
+        </div>
       </article>
     </section>
 
@@ -777,6 +983,59 @@
     let videoCameraProfile = "uc60";
     let videoStreamActive = false;
     let videoConnectTimer = null;
+    let videoReadyIds = new Set();
+    let fcPollTimer = null;
+    let fcSerialBaud = 921600;
+    let fcSerialDevice = "/dev/ttyAMA0";
+    let fcCardLayout = ["link", "mode", "battery", "gps", "attitude", "speed"];
+    let lastFcTelemetry = null;
+
+    const FC_DEFAULT_LAYOUT = ["link", "mode", "battery", "gps", "attitude", "speed"];
+    const FC_BUILTIN_DEFS = {
+      link: { title: "MAVLink link", category: "Standard" },
+      mode: { title: "Flight mode", category: "Standard" },
+      battery: { title: "Battery", category: "Standard" },
+      gps: { title: "GPS", category: "Standard" },
+      attitude: {
+        title: "Attitude (Roll / Pitch / Yaw)",
+        category: "Attitude",
+        hint: "Roll, pitch, and yaw together on one card",
+      },
+      speed: { title: "Speed / Alt", category: "Standard" },
+    };
+    const FC_METRICS = [
+      { id: "distance_from_home", label: "Distance from home", path: "navigation.distance_from_home_m", format: "dist", category: "Navigation", hint: "Needs GPS fix and home set on FC" },
+      { id: "wp_distance", label: "Waypoint distance", path: "navigation.wp_distance_m", format: "dist", category: "Navigation", hint: "Distance to current waypoint" },
+      { id: "target_bearing", label: "Target bearing", path: "navigation.target_bearing_deg", unit: "°", category: "Navigation" },
+      { id: "heading", label: "Heading", path: "position.heading_deg", unit: "°", category: "Navigation" },
+      { id: "climb_rate", label: "Climb rate", path: "position.climb_m_s", unit: "m/s", category: "Navigation" },
+      { id: "altitude_msl", label: "Altitude (MSL)", path: "vfr_hud.alt_msl_m", unit: "m", category: "Altitude" },
+      { id: "altitude_relative", label: "Altitude (relative)", path: "position.relative_alt_m", unit: "m", category: "Altitude" },
+      { id: "groundspeed", label: "Groundspeed", path: "vfr_hud.groundspeed_m_s", unit: "m/s", category: "Speed" },
+      { id: "airspeed", label: "Airspeed", path: "vfr_hud.airspeed_m_s", unit: "m/s", category: "Speed" },
+      { id: "roll", label: "Roll only", path: "attitude.roll_deg", unit: "°", category: "Attitude", hint: "Single-axis roll card" },
+      { id: "pitch", label: "Pitch only", path: "attitude.pitch_deg", unit: "°", category: "Attitude", hint: "Single-axis pitch card" },
+      { id: "yaw", label: "Yaw only", path: "attitude.yaw_deg", unit: "°", category: "Attitude", hint: "Single-axis yaw card" },
+      { id: "battery_voltage", label: "Battery voltage", path: "sys_status.voltage_v", unit: "V", format: "dec2", category: "Battery" },
+      { id: "battery_remaining", label: "Battery remaining", path: "sys_status.battery_remaining_pct", format: "pct", category: "Battery" },
+      { id: "battery_current", label: "Battery current", path: "sys_status.current_a", unit: "A", category: "Battery" },
+      { id: "gps_satellites", label: "GPS satellites", path: "gps.satellites", format: "int", category: "GPS" },
+      { id: "gps_hdop", label: "GPS HDOP", path: "gps.eph", format: "dec1", category: "GPS" },
+      { id: "fc_load", label: "FC CPU load", path: "sys_status.load_pct", format: "pct", category: "System" },
+      { id: "messages_total", label: "MAVLink messages", path: "link.messages_total", format: "int", category: "Link" },
+    ];
+
+    const fcCardsEl = document.getElementById("fc-cards");
+    const fcAddDialog = document.getElementById("fc-add-dialog");
+    const fcAddSearch = document.getElementById("fc-add-search");
+    const fcAddList = document.getElementById("fc-add-list");
+    const fcAddCardBtn = document.getElementById("fc-add-card");
+    const fcResetCardsBtn = document.getElementById("fc-reset-cards");
+    const fcAddCancel = document.getElementById("fc-add-cancel");
+    const fcSerialDeviceInput = document.getElementById("fc-serial-device");
+    const fcSerialBaudSelect = document.getElementById("fc-serial-baud");
+    const fcSerialStatus = document.getElementById("fc-serial-status");
+    const fcSerialApply = document.getElementById("fc-serial-apply");
 
     const bgFile = document.getElementById("bg-file");
     const bgPreviewWrap = document.getElementById("bg-preview-wrap");
@@ -852,6 +1111,367 @@
       return out;
     }
 
+    function fmtNum(v, digits = 1) {
+      if (v == null || Number.isNaN(v)) return "—";
+      return Number(v).toFixed(digits);
+    }
+
+    function fcGetPath(obj, path) {
+      return path.split(".").reduce((o, k) => (o != null && o[k] != null ? o[k] : undefined), obj);
+    }
+
+    function fcFormatMetric(val, spec) {
+      if (val == null || (typeof val === "number" && !Number.isFinite(val))) return "—";
+      if (spec.format === "dist") return val >= 1000 ? `${fmtNum(val / 1000, 2)} km` : `${fmtNum(val, 0)} m`;
+      if (spec.format === "pct") return `${fmtNum(val, 0)}%`;
+      if (spec.format === "int") return String(Math.round(val));
+      if (spec.format === "dec2") return `${fmtNum(val, 2)}${spec.unit ? " " + spec.unit : ""}`;
+      if (spec.format === "dec1") return `${fmtNum(val, 1)}${spec.unit ? " " + spec.unit : ""}`;
+      if (spec.unit) return `${fmtNum(val, 1)} ${spec.unit}`;
+      return fmtNum(val, 1);
+    }
+
+    function fcCardDef(id) {
+      if (FC_BUILTIN_DEFS[id]) return { id, kind: "builtin", ...FC_BUILTIN_DEFS[id] };
+      const metric = FC_METRICS.find((m) => m.id === id);
+      if (metric) return { kind: "metric", title: metric.label, ...metric };
+      return null;
+    }
+
+    function fcNormalizeLayout(raw) {
+      if (!Array.isArray(raw)) return [...FC_DEFAULT_LAYOUT];
+      const seen = new Set();
+      const out = [];
+      for (const item of raw) {
+        if (typeof item !== "string" || seen.has(item) || !fcCardDef(item)) continue;
+        seen.add(item);
+        out.push(item);
+      }
+      return out.length ? out : [...FC_DEFAULT_LAYOUT];
+    }
+
+    async function saveFcCardLayout() {
+      try {
+        await postSettingsMerge({ fcCardLayout });
+      } catch {
+        /* ignore */
+      }
+    }
+
+    function removeFcCard(id) {
+      fcCardLayout = fcCardLayout.filter((c) => c !== id);
+      void saveFcCardLayout();
+      mountFcCards();
+      if (lastFcTelemetry) renderFcTelemetry(lastFcTelemetry);
+    }
+
+    function addFcCard(id) {
+      if (fcCardLayout.includes(id)) return;
+      fcCardLayout.push(id);
+      void saveFcCardLayout();
+      mountFcCards();
+      if (lastFcTelemetry) renderFcTelemetry(lastFcTelemetry);
+    }
+
+    function resetFcCards() {
+      fcCardLayout = [...FC_DEFAULT_LAYOUT];
+      void saveFcCardLayout();
+      mountFcCards();
+      if (lastFcTelemetry) renderFcTelemetry(lastFcTelemetry);
+    }
+
+    function mountFcCardShell(id) {
+      const def = fcCardDef(id);
+      if (!def || !fcCardsEl) return null;
+      const art = document.createElement("article");
+      art.className = "card fc-card";
+      art.dataset.fcCard = id;
+      const removeBtn = `<button type="button" class="fc-card-remove" aria-label="Remove ${def.title || def.label}">×</button>`;
+      if (id === "link") {
+        art.innerHTML = `${removeBtn}<h2>MAVLink link</h2><div class="fc-link-pill wait fc-card-pill">Checking…</div><div class="metric fc-card-metric">—</div><div class="sub fc-card-sub">mavlink-router · MAVLink2</div>`;
+      } else if (id === "attitude") {
+        art.innerHTML = `${removeBtn}<h2>Attitude</h2><div class="fc-att-lines"><div class="fc-att-row"><span>Roll</span><span class="fc-att-roll">—</span></div><div class="fc-att-row"><span>Pitch</span><span class="fc-att-pitch">—</span></div><div class="fc-att-row"><span>Yaw</span><span class="fc-att-yaw">—</span></div></div><div class="sub fc-card-sub">Waiting for attitude stream</div>`;
+      } else {
+        art.innerHTML = `${removeBtn}<h2>${def.title || def.label}</h2><div class="metric fc-card-metric">—</div><div class="sub fc-card-sub">${def.hint || ""}</div>`;
+      }
+      art.querySelector(".fc-card-remove").addEventListener("click", () => removeFcCard(id));
+      return art;
+    }
+
+    function mountFcCards() {
+      if (!fcCardsEl) return;
+      fcCardsEl.innerHTML = "";
+      for (const id of fcCardLayout) {
+        const art = mountFcCardShell(id);
+        if (art) fcCardsEl.appendChild(art);
+      }
+    }
+
+    function fillFcAddList(filter) {
+      if (!fcAddList) return;
+      const q = (filter || "").trim().toLowerCase();
+      const available = [];
+      for (const id of Object.keys(FC_BUILTIN_DEFS)) {
+        if (!fcCardLayout.includes(id)) available.push({ id, ...FC_BUILTIN_DEFS[id], kind: "builtin" });
+      }
+      for (const m of FC_METRICS) {
+        if (!fcCardLayout.includes(m.id)) available.push({ kind: "metric", title: m.label, ...m });
+      }
+      const filtered = available.filter((item) => {
+        if (!q) return true;
+        const hay = `${item.title || item.label} ${item.category || ""} ${item.hint || ""}`.toLowerCase();
+        return hay.includes(q);
+      });
+      fcAddList.innerHTML = "";
+      if (!filtered.length) {
+        fcAddList.innerHTML = `<p class="sub" style="margin:0">No matching cards${fcCardLayout.length ? " (all added already)" : ""}.</p>`;
+        return;
+      }
+      const groups = new Map();
+      for (const item of filtered) {
+        const cat = item.category || "Other";
+        if (!groups.has(cat)) groups.set(cat, []);
+        groups.get(cat).push(item);
+      }
+      for (const [cat, items] of groups) {
+        const group = document.createElement("div");
+        group.className = "fc-add-group";
+        group.innerHTML = `<h3>${cat}</h3>`;
+        for (const item of items) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "fc-add-item";
+          btn.innerHTML = `${item.title || item.label}${item.hint ? `<small>${item.hint}</small>` : ""}`;
+          btn.addEventListener("click", () => {
+            addFcCard(item.id);
+            if (fcAddDialog) fcAddDialog.close();
+          });
+          group.appendChild(btn);
+        }
+        fcAddList.appendChild(group);
+      }
+    }
+
+    function openFcAddDialog() {
+      if (!fcAddDialog) return;
+      if (fcAddSearch) fcAddSearch.value = "";
+      fillFcAddList("");
+      fcAddDialog.showModal();
+      if (fcAddSearch) fcAddSearch.focus();
+    }
+
+    function setFcLinkPill(el, kind, text) {
+      if (!el) return;
+      el.className = "fc-link-pill fc-card-pill " + kind;
+      el.textContent = text;
+    }
+
+    function syncFcSerialForm(cfg) {
+      if (cfg && cfg.device && fcSerialDeviceInput) fcSerialDeviceInput.value = cfg.device;
+      if (cfg && cfg.baud != null && fcSerialBaudSelect) fcSerialBaudSelect.value = String(cfg.baud);
+      if (typeof fcSerialDevice === "string" && fcSerialDeviceInput && !fcSerialDeviceInput.value) {
+        fcSerialDeviceInput.value = fcSerialDevice;
+      }
+      if (fcSerialBaudSelect && fcSerialBaud) fcSerialBaudSelect.value = String(fcSerialBaud);
+    }
+
+    async function loadFcConfig() {
+      try {
+        const r = await fetch("/api/telemetry/config", { cache: "no-store" });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const cfg = await r.json();
+        if (cfg.device) fcSerialDevice = cfg.device;
+        if (cfg.baud != null) fcSerialBaud = cfg.baud;
+        syncFcSerialForm(cfg);
+        return cfg;
+      } catch {
+        syncFcSerialForm({ device: fcSerialDevice, baud: fcSerialBaud });
+        return null;
+      }
+    }
+
+    function renderFcTelemetry(data) {
+      lastFcTelemetry = data;
+      if (!fcCardsEl) return;
+      const connected = !!(data && data.connected);
+      const router = (data && data.router) || {};
+      const hb = (data && data.heartbeat) || {};
+      const sys = (data && data.sys_status) || {};
+      const gps = (data && data.gps) || {};
+      const att = (data && data.attitude) || {};
+      const vfr = (data && data.vfr_hud) || {};
+      const link = (data && data.link) || {};
+      const rates = (data && data.stream_rates) || {};
+      const params = rates.params || {};
+      const sr = rates.sr_port != null ? rates.sr_port : 1;
+
+      for (const id of fcCardLayout) {
+        const card = fcCardsEl.querySelector(`[data-fc-card="${id}"]`);
+        if (!card) continue;
+
+        if (id === "link") {
+          const pill = card.querySelector(".fc-card-pill");
+          const metric = card.querySelector(".fc-card-metric");
+          const sub = card.querySelector(".fc-card-sub");
+          if (connected) {
+            setFcLinkPill(pill, "live", "Connected");
+            if (metric) metric.textContent = hb.autopilot || "FC online";
+          } else if (data && data.error) {
+            setFcLinkPill(pill, "err", "Offline");
+            if (metric) metric.textContent = "Telemetry unavailable";
+          } else {
+            setFcLinkPill(pill, "wait", "Waiting");
+            if (metric) metric.textContent = "No heartbeat yet";
+          }
+          if (sub) {
+            const dev = router.serial_device || fcSerialDevice || "—";
+            const baud = router.serial_baud != null ? router.serial_baud : fcSerialBaud;
+            const msgs = link.messages_total != null ? link.messages_total : 0;
+            sub.textContent = `mavlink-router · ${dev} @ ${baud} · ${msgs} msgs`;
+          }
+          continue;
+        }
+
+        if (id === "mode") {
+          const metric = card.querySelector(".fc-card-metric");
+          const sub = card.querySelector(".fc-card-sub");
+          if (metric) metric.textContent = hb.armed ? "Armed" : "Disarmed";
+          if (sub) {
+            const mode = hb.custom_mode != null ? `Mode ${hb.custom_mode}` : "Mode —";
+            sub.textContent = `${hb.autopilot || "Autopilot"} · ${mode} · status ${hb.system_status ?? "—"}`;
+          }
+          continue;
+        }
+
+        if (id === "battery") {
+          const metric = card.querySelector(".fc-card-metric");
+          const sub = card.querySelector(".fc-card-sub");
+          if (metric) metric.textContent = sys.voltage_v > 0 ? `${fmtNum(sys.voltage_v, 2)} V` : "—";
+          if (sub) {
+            const pct = sys.battery_remaining_pct >= 0 ? `${sys.battery_remaining_pct}%` : "—";
+            sub.textContent = `Remaining ${pct} · ${fmtNum(sys.current_a, 1)} A · load ${fmtNum(sys.load_pct, 0)}%`;
+          }
+          continue;
+        }
+
+        if (id === "gps") {
+          const metric = card.querySelector(".fc-card-metric");
+          const sub = card.querySelector(".fc-card-sub");
+          if (metric) metric.textContent = gps.fix_name || "—";
+          if (sub) {
+            const pos =
+              gps.lat != null && gps.lon != null && gps.fix_type >= 2
+                ? `${fmtNum(gps.lat, 5)}, ${fmtNum(gps.lon, 5)}`
+                : "No fix";
+            sub.textContent = `${pos} · ${gps.satellites ?? 0} sats · ${fmtNum(gps.alt_m, 1)} m`;
+          }
+          continue;
+        }
+
+        if (id === "attitude") {
+          const attDeg = (v) => (att.valid === false ? "—" : `${fmtNum(v, 1)}°`);
+          const rollEl = card.querySelector(".fc-att-roll");
+          const pitchEl = card.querySelector(".fc-att-pitch");
+          const yawEl = card.querySelector(".fc-att-yaw");
+          const sub = card.querySelector(".fc-card-sub");
+          if (rollEl) rollEl.textContent = attDeg(att.roll_deg);
+          if (pitchEl) pitchEl.textContent = attDeg(att.pitch_deg);
+          if (yawEl) yawEl.textContent = attDeg(att.yaw_deg);
+          if (sub) {
+            const e1 = params[`SR${sr}_EXTRA1`];
+            const e2 = params[`SR${sr}_EXTRA2`];
+            const e3 = params[`SR${sr}_EXTRA3`];
+            const parts = [];
+            if (e1 != null) parts.push(`EXTRA1 ${e1} Hz`);
+            if (e2 != null) parts.push(`EXTRA2 ${e2} Hz`);
+            if (e3 != null) parts.push(`EXTRA3 ${e3} Hz`);
+            if (att.valid) {
+              sub.textContent = att.source
+                ? `${att.source}${parts.length ? " · " + parts.join(" · ") : ""}`
+                : parts.length
+                  ? parts.join(" · ")
+                  : "Live";
+            } else if (connected) {
+              sub.textContent = parts.length
+                ? `SR${sr} · ${parts.join(" · ")}`
+                : `Reading SR${sr} stream rates from FC…`;
+            } else {
+              sub.textContent = "Waiting for FC link";
+            }
+          }
+          continue;
+        }
+
+        if (id === "speed") {
+          const metric = card.querySelector(".fc-card-metric");
+          const sub = card.querySelector(".fc-card-sub");
+          if (metric) metric.textContent = `${fmtNum(vfr.groundspeed_m_s, 1)} m/s GS`;
+          if (sub) sub.textContent = `Airspeed ${fmtNum(vfr.airspeed_m_s, 1)} m/s · MSL ${fmtNum(vfr.alt_msl_m, 1)} m`;
+          continue;
+        }
+
+        const spec = FC_METRICS.find((m) => m.id === id);
+        if (spec) {
+          const metric = card.querySelector(".fc-card-metric");
+          const sub = card.querySelector(".fc-card-sub");
+          let raw = fcGetPath(data, spec.path);
+          if (spec.path.startsWith("attitude.") && att.valid === false) raw = null;
+          if (metric) metric.textContent = fcFormatMetric(raw, spec);
+          if (sub && spec.hint) sub.textContent = spec.hint;
+        }
+      }
+    }
+
+    async function pollFcTelemetry() {
+      try {
+        const r = await fetch("/api/telemetry", { cache: "no-store" });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const data = await r.json();
+        renderFcTelemetry(data);
+      } catch {
+        renderFcTelemetry({ connected: false, error: true });
+      }
+    }
+
+    function startFcPoll() {
+      stopFcPoll();
+      void loadFcConfig();
+      void pollFcTelemetry();
+      fcPollTimer = setInterval(pollFcTelemetry, 1000);
+    }
+
+    function stopFcPoll() {
+      if (fcPollTimer) {
+        clearInterval(fcPollTimer);
+        fcPollTimer = null;
+      }
+    }
+
+    async function applyFcSerialConfig() {
+      if (!fcSerialApply) return;
+      const device = (fcSerialDeviceInput && fcSerialDeviceInput.value.trim()) || fcSerialDevice;
+      const baud = fcSerialBaudSelect ? parseInt(fcSerialBaudSelect.value, 10) : fcSerialBaud;
+      if (fcSerialStatus) fcSerialStatus.textContent = "";
+      fcSerialApply.disabled = true;
+      try {
+        const r = await fetch("/api/telemetry/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ device, baud }),
+        });
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok || body.ok === false) throw new Error(body.error || `HTTP ${r.status}`);
+        fcSerialDevice = body.device || device;
+        fcSerialBaud = body.baud != null ? body.baud : baud;
+        await postSettingsMerge({ fcSerialDevice, fcSerialBaud });
+        setTimeout(pollFcTelemetry, 1200);
+      } catch (e) {
+        if (fcSerialStatus) fcSerialStatus.textContent = e.message || "Apply failed.";
+      } finally {
+        fcSerialApply.disabled = false;
+      }
+    }
+
     function getSelectedVideoProfileId() {
       return (videoCameraSelect && videoCameraSelect.value) || videoCameraProfile || DEFAULT_VIDEO_PROFILE;
     }
@@ -893,7 +1513,8 @@
       for (const row of rows) {
         const opt = document.createElement("option");
         opt.value = row.id;
-        opt.textContent = videoProfileDisplayName(row);
+        const detected = videoReadyIds.has(row.id) ? " · detected" : "";
+        opt.textContent = videoProfileDisplayName(row) + detected;
         videoCameraSelect.appendChild(opt);
       }
       const has = rows.some((row) => row.id === wantId);
@@ -1054,6 +1675,76 @@
       }
     }
 
+    async function autodetectVideoCameras() {
+      const ready = [];
+      for (const p of videoProfilesCache) {
+        if (!p || !p.id) continue;
+        try {
+          const r = await fetchVideoReady(p.id);
+          if (r.ok) ready.push(p.id);
+        } catch {
+          /* skip */
+        }
+      }
+      videoReadyIds = new Set(ready);
+      return ready;
+    }
+
+    function pickAutostartProfile(ready) {
+      if (!ready.length) return "";
+      if (videoCameraProfile && ready.includes(videoCameraProfile)) return videoCameraProfile;
+      return ready[0];
+    }
+
+    async function refreshVideoDetection() {
+      await loadVideoProfiles();
+      const ready = await autodetectVideoCameras();
+      const iface = videoInterfaceSelect ? videoInterfaceSelect.value : "usb";
+      fillVideoCameraSelect(videoProfilesCache, iface, videoCameraProfile);
+      if (!videoStreamActive && ready.length) {
+        const pick = pickAutostartProfile(ready);
+        syncVideoSelectsFromProfileId(videoProfilesCache, pick);
+        await startVideoPreview();
+      } else if (videoStreamActive && videoStatus && ready.length) {
+        const names = ready
+          .map((id) => {
+            const p = videoProfilesCache.find((r) => r.id === id);
+            return p ? videoProfileDisplayName(p) : id;
+          })
+          .join(" · ");
+        if (!videoStage || !videoStage.classList.contains("has-frame")) return ready;
+        if (!videoStatus.textContent) videoStatus.textContent = `Detected: ${names}`;
+      }
+      return ready;
+    }
+
+    async function switchVideoProfile(id) {
+      if (!id) return;
+      videoCameraProfile = id;
+      syncVideoSelectsFromProfileId(videoProfilesCache, id);
+      if (videoStreamActive) {
+        refreshVideoStream();
+        return;
+      }
+      if (!videoReadyIds.has(id)) {
+        let ready;
+        try {
+          ready = await fetchVideoReady(id);
+        } catch {
+          ready = { ok: false, data: { reason: "Could not reach video service." } };
+        }
+        if (!ready.ok) {
+          if (videoStatus) {
+            videoStatus.textContent =
+              (ready.data && (ready.data.reason || ready.data.error)) || "Camera not detected.";
+          }
+          return;
+        }
+        videoReadyIds.add(id);
+      }
+      await startVideoPreview();
+    }
+
     async function fetchVideoReady(profileId) {
       const id = encodeURIComponent(profileId || DEFAULT_VIDEO_PROFILE);
       const r = await fetch("/api/video/ready?profile=" + id, { cache: "no-store" });
@@ -1068,12 +1759,13 @@
 
     async function startVideoPreview() {
       if (!videoMjpeg || !videoStatus) return;
-      if (videoStreamActive) stopVideoPreview();
       const id = getSelectedVideoProfileId();
       if (!id) {
         videoStatus.textContent = "Choose a camera model first.";
         return;
       }
+      if (videoStreamActive && videoCameraProfile === id && videoMjpeg.src) return;
+      if (videoStreamActive) stopVideoPreview();
       videoCameraProfile = id;
       videoStatus.textContent = "Checking camera…";
       let ready;
@@ -1117,16 +1809,26 @@
     }
 
     function refreshVideoStream() {
-      if (!videoStreamActive) return;
       if (!videoMjpeg || !videoStage || !videoStatus) return;
       const id = getSelectedVideoProfileId();
       if (!id) return;
       videoCameraProfile = id;
+      videoStreamActive = true;
       videoStage.classList.remove("has-frame");
-      videoStatus.textContent = "Connecting (MIPI can take 15–20s the first time)…";
+      videoStatus.textContent = "Switching camera…";
       videoMjpeg.alt = "Live camera (" + id + ")";
       videoMjpeg.removeAttribute("hidden");
+      if (videoConnectTimer) clearTimeout(videoConnectTimer);
+      videoConnectTimer = setTimeout(() => {
+        if (!videoStreamActive || !videoStatus) return;
+        if (videoStage && videoStage.classList.contains("has-frame")) return;
+        videoStatus.textContent =
+          "Stream timed out switching camera. Stop, wait a few seconds, then try again.";
+      }, 45000);
       videoMjpeg.src = "/api/video/stream?profile=" + encodeURIComponent(id) + "&t=" + Date.now();
+      if (videoStopPreview) videoStopPreview.disabled = false;
+      if (videoStartPreview) videoStartPreview.disabled = true;
+      if (videoFullscreenBtn) videoFullscreenBtn.disabled = false;
     }
 
     function loadBgFromStorage() {
@@ -2016,6 +2718,17 @@
       if (typeof srv.videoCameraProfile === "string" && srv.videoCameraProfile.trim()) {
         videoCameraProfile = srv.videoCameraProfile.trim();
       }
+      if (typeof srv.fcSerialDevice === "string" && srv.fcSerialDevice.trim()) {
+        fcSerialDevice = srv.fcSerialDevice.trim();
+      }
+      if (typeof srv.fcSerialBaud === "number" && Number.isFinite(srv.fcSerialBaud)) {
+        fcSerialBaud = srv.fcSerialBaud;
+      }
+      if (Array.isArray(srv.fcCardLayout)) {
+        fcCardLayout = fcNormalizeLayout(srv.fcCardLayout);
+      }
+      mountFcCards();
+      syncFcSerialForm({ device: fcSerialDevice, baud: fcSerialBaud });
       try {
         await loadVideoProfiles();
       } catch {
@@ -2045,13 +2758,13 @@
           if (bgDim) bgDim.value = String(lastBgState.overlayOpacity ?? 0.68);
         }
       }
+      if (name === "flight-controller") {
+        startFcPoll();
+      } else {
+        stopFcPoll();
+      }
       if (name === "video") {
-        stopVideoPreview();
-        loadVideoProfiles().then(() => {
-          if (videoStatus) {
-            videoStatus.textContent = "No stream";
-          }
-        });
+        void refreshVideoDetection();
       }
     }
 
@@ -2062,14 +2775,15 @@
     async function saveVideoProfileSelection(id) {
       if (!id) return;
       videoCameraProfile = id;
-      stopVideoPreview();
       try {
         await postSettingsMerge({ videoCameraProfile: id });
       } catch {
         /* ignore — selection still applies locally */
       }
-      if (videoStatus) {
-        videoStatus.textContent = "Camera saved.";
+      if (videoStreamActive || videoReadyIds.has(id)) {
+        await switchVideoProfile(id);
+      } else if (videoStatus) {
+        videoStatus.textContent = "Camera saved (not detected — plug in and open Video tab).";
       }
     }
 
@@ -2144,9 +2858,21 @@
       });
     }
 
+    if (fcSerialApply) {
+      fcSerialApply.addEventListener("click", () => {
+        void applyFcSerialConfig();
+      });
+    }
+    if (fcAddCardBtn) fcAddCardBtn.addEventListener("click", openFcAddDialog);
+    if (fcResetCardsBtn) fcResetCardsBtn.addEventListener("click", resetFcCards);
+    if (fcAddCancel) fcAddCancel.addEventListener("click", () => fcAddDialog && fcAddDialog.close());
+    if (fcAddSearch) fcAddSearch.addEventListener("input", () => fillFcAddList(fcAddSearch.value));
+
     initHostMeta()
       .then(() => hydrateFromServer())
       .finally(() => {
+        mountFcCards();
+        void refreshVideoDetection();
         poll();
         setInterval(poll, 2000);
       });

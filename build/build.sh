@@ -13,8 +13,8 @@
 #   bash ./build/build.sh --amd              # PC: linux/amd64
 #   bash ./build/build.sh --arm stats hmi video
 #
-# --arm / --amd  →  sets DOCKER_DEFAULT_PLATFORM for compose build (linux/arm64 | linux/amd64).
-# Omit both for a native / default-platform build on this machine.
+# --arm / --amd  →  buildx cross-build for that platform (--load into local docker).
+# Omit both for a native compose build on this machine.
 #
 set -euo pipefail
 
@@ -98,12 +98,12 @@ if [[ -n "$ONLY_ARG" ]]; then
 fi
 
 if [[ ${#SERVICES[@]} -eq 0 ]]; then
-  SERVICES=(stats hmi video)
+  SERVICES=(stats hmi video mavrouter telemetry)
 fi
 
 for svc in "${SERVICES[@]}"; do
   case "$svc" in
-    stats|hmi|video) ;;
+    stats|hmi|video|mavrouter|telemetry) ;;
     *)
       echo "[build] unknown service: $svc" >&2
       exit 2
@@ -111,19 +111,40 @@ for svc in "${SERVICES[@]}"; do
   esac
 done
 
+image_for_svc() {
+  local reg tag
+  reg="${IMAGE_REGISTRY:-ghcr.io/spoon-development}"
+  tag="${IMAGE_TAG:-latest}"
+  echo "${reg}/dronebros-${1}:${tag}"
+}
+
+platform_buildx() {
+  if ! docker buildx version >/dev/null 2>&1; then
+    echo "[build] docker buildx required for --arm/--amd (install Docker Buildx)" >&2
+    exit 2
+  fi
+  local builder="diy-drone-local"
+  if ! docker buildx inspect "$builder" >/dev/null 2>&1; then
+    docker buildx create --name "$builder" --driver docker-container --bootstrap
+  fi
+  docker buildx use "$builder"
+  local svc img
+  for svc in "$@"; do
+    img="$(image_for_svc "$svc")"
+    echo "[build] buildx $img ($PLATFORM_BUILD)"
+    docker buildx build --platform "$PLATFORM_BUILD" -t "$img" --load "${ROOT}/services/${svc}"
+  done
+}
+
 compose_build() {
+  if [[ -n "$PLATFORM_BUILD" ]]; then
+    platform_buildx "$@"
+    return
+  fi
   if docker compose version >/dev/null 2>&1; then
-    if [[ -n "$PLATFORM_BUILD" ]]; then
-      DOCKER_DEFAULT_PLATFORM="$PLATFORM_BUILD" docker compose "${COMPOSE_FILES[@]}" build "$@"
-    else
-      docker compose "${COMPOSE_FILES[@]}" build "$@"
-    fi
+    docker compose "${COMPOSE_FILES[@]}" build "$@"
   elif command -v docker-compose >/dev/null 2>&1; then
-    if [[ -n "$PLATFORM_BUILD" ]]; then
-      DOCKER_DEFAULT_PLATFORM="$PLATFORM_BUILD" docker-compose "${COMPOSE_FILES[@]}" build "$@"
-    else
-      docker-compose "${COMPOSE_FILES[@]}" build "$@"
-    fi
+    docker-compose "${COMPOSE_FILES[@]}" build "$@"
   else
     echo "Docker Compose not found." >&2
     echo "Install v2 plugin:  sudo apt update && sudo apt install -y docker-compose-v2" >&2

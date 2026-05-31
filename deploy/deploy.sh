@@ -81,6 +81,32 @@ _stack_image_refs() {
   STACK_STATS="${reg}/dronebros-stats:${tag}"
   STACK_HMI="${reg}/dronebros-hmi:${tag}"
   STACK_VIDEO="${reg}/dronebros-video:${tag}"
+  STACK_MAVROUTER="${reg}/dronebros-mavrouter:${tag}"
+  STACK_TELEMETRY="${reg}/dronebros-telemetry:${tag}"
+}
+
+_compose_profiles_from_config() {
+  local p
+  p="$(grep -E '^compose_profiles:' "$CFG" 2>/dev/null | head -1 | sed 's/^compose_profiles:[[:space:]]*//;s/[[:space:]]*$//')"
+  p="${p//\"/}"
+  p="${p//\'/}"
+  echo "$p"
+}
+
+_fc_profile_enabled() {
+  local profiles
+  profiles="$(_compose_profiles_from_config)"
+  [[ "$profiles" == *fc* ]]
+}
+
+_stack_bundle_refs() {
+  _stack_image_refs
+  STACK_BUNDLE_REFS=("$STACK_STATS" "$STACK_HMI" "$STACK_VIDEO")
+  STACK_BUNDLE_TARS=(dronebros-stats.tar dronebros-hmi.tar dronebros-video.tar)
+  if _fc_profile_enabled; then
+    STACK_BUNDLE_REFS+=("$STACK_MAVROUTER" "$STACK_TELEMETRY")
+    STACK_BUNDLE_TARS+=(dronebros-mavrouter.tar dronebros-telemetry.tar)
+  fi
 }
 
 _bundle_build_platform_flag() {
@@ -90,8 +116,34 @@ _bundle_build_platform_flag() {
   esac
 }
 
+_bundle_want_arch() {
+  case "$(_bundle_platform_from_config)" in
+    linux/amd64) echo amd64 ;;
+    linux/arm/v7|linux/armhf) echo arm ;;
+    *) echo arm64 ;;
+  esac
+}
+
+_bundle_verify_local_arch() {
+  local want ref got
+  want="$(_bundle_want_arch)"
+  for r in "${STACK_BUNDLE_REFS[@]}"; do
+    got="$(docker image inspect "$r" --format '{{.Architecture}}' 2>/dev/null || true)"
+    if [[ -z "$got" ]]; then
+      echo "[deploy] local: cannot read architecture for $r" >&2
+      exit 1
+    fi
+    if [[ "$got" != "$want" ]]; then
+      echo "[deploy] local: $r is linux/$got but Pi expects linux/$want" >&2
+      echo "[deploy] Rebuild for the Pi: bash ./build/build.sh $(_bundle_build_platform_flag) --force" >&2
+      echo "[deploy] Or: bash ./deploy/deploy.sh --local --build" >&2
+      exit 1
+    fi
+  done
+}
+
 _bundle_ensure_local_images() {
-  _stack_image_refs
+  _stack_bundle_refs
   local plat build_flag
   plat="$(_bundle_platform_from_config)"
   if [[ "$LOCAL_BUILD" -eq 1 ]]; then
@@ -100,9 +152,9 @@ _bundle_ensure_local_images() {
     bash "${ROOT}/build/build.sh" "$build_flag" --force
   else
     echo "[deploy] local: shipping existing local tags (${STACK_REG}/dronebros-*:${STACK_TAG})"
-    echo "[deploy] local: (run bash ./build/build.sh first, or pass --build to rebuild here)"
+    echo "[deploy] local: (run bash ./build/build.sh $(_bundle_build_platform_flag) first, or pass --build to rebuild here)"
   fi
-  for r in "$STACK_STATS" "$STACK_HMI" "$STACK_VIDEO"; do
+  for r in "${STACK_BUNDLE_REFS[@]}"; do
     if ! docker image inspect "$r" >/dev/null 2>&1; then
       echo "[deploy] local: missing image $r" >&2
       echo "[deploy] Run: bash ./build/build.sh $(_bundle_build_platform_flag)" >&2
@@ -110,17 +162,16 @@ _bundle_ensure_local_images() {
       exit 1
     fi
   done
+  _bundle_verify_local_arch
 }
 
 _bundle_pull_registry_images() {
-  _stack_image_refs
+  _stack_bundle_refs
   local plat="$(_bundle_platform_from_config)"
-  echo "[deploy] registry: pulling $STACK_STATS for $plat"
-  docker pull --platform "$plat" "$STACK_STATS"
-  echo "[deploy] registry: pulling $STACK_HMI for $plat"
-  docker pull --platform "$plat" "$STACK_HMI"
-  echo "[deploy] registry: pulling $STACK_VIDEO for $plat"
-  docker pull --platform "$plat" "$STACK_VIDEO"
+  for r in "${STACK_BUNDLE_REFS[@]}"; do
+    echo "[deploy] registry: pulling $r for $plat"
+    docker pull --platform "$plat" "$r"
+  done
 }
 
 _bundle_acquire_images() {
@@ -279,8 +330,14 @@ _bundle_ssh_load_images() {
   local dest="$1"
   shift
   local -a ssh_base=("$@")
-  _stack_image_refs
-  "${ssh_base[@]}" "$dest" bash -s -- "$STACK_STATS" "$STACK_HMI" "$STACK_VIDEO" <<'EOF'
+  _stack_bundle_refs
+  local -a remote_args=()
+  local i
+  for i in "${!STACK_BUNDLE_TARS[@]}"; do
+    remote_args+=("${STACK_BUNDLE_TARS[$i]}")
+    remote_args+=("${STACK_BUNDLE_REFS[$i]}")
+  done
+  "${ssh_base[@]}" "$dest" bash -s -- "${remote_args[@]}" <<'EOF'
 set -euo pipefail
 load_tag() {
   local tar="$1" ref="$2"
@@ -305,9 +362,10 @@ load_tag() {
   echo "[deploy] bundle: tagged $ref"
   rm -f "$tar"
 }
-load_tag dronebros-stats.tar "$1"
-load_tag dronebros-hmi.tar "$2"
-load_tag dronebros-video.tar "$3"
+while [[ $# -ge 2 ]]; do
+  load_tag "$1" "$2"
+  shift 2
+done
 EOF
 }
 
@@ -317,7 +375,7 @@ _bundle_push_one_target() {
   local ssh_host="$1" ssh_user="$2"
 
   plat="$(_bundle_platform_from_config)"
-  _stack_image_refs
+  _stack_bundle_refs
 
   ssh_base=(ssh -o StrictHostKeyChecking=accept-new)
   scp_base=(scp -o StrictHostKeyChecking=accept-new)
@@ -329,10 +387,19 @@ _bundle_push_one_target() {
   tmp="$(mktemp -d "${TMPDIR:-/tmp}/diy-drone-bundle.XXXXXX")"
   trap 'rm -rf "$tmp"' RETURN
 
-  _bundle_save_images_retry "$plat" "$STACK_STATS" "$tmp/dronebros-stats.tar" "$STACK_HMI" "$tmp/dronebros-hmi.tar" "$STACK_VIDEO" "$tmp/dronebros-video.tar"
+  local -a save_pairs=()
+  local i
+  for i in "${!STACK_BUNDLE_REFS[@]}"; do
+    save_pairs+=("${STACK_BUNDLE_REFS[$i]}" "$tmp/${STACK_BUNDLE_TARS[$i]}")
+  done
+  _bundle_save_images_retry "$plat" "${save_pairs[@]}"
 
   echo "[deploy] bundle ($BUNDLE_SOURCE): copying to $dest"
-  "${scp_base[@]}" "$tmp/dronebros-stats.tar" "$tmp/dronebros-hmi.tar" "$tmp/dronebros-video.tar" "${dest}:"
+  local -a scp_files=()
+  for t in "${STACK_BUNDLE_TARS[@]}"; do
+    scp_files+=("$tmp/$t")
+  done
+  "${scp_base[@]}" "${scp_files[@]}" "${dest}:"
 
   echo "[deploy] bundle: loading on $dest"
   _bundle_ssh_load_images "$dest" "${ssh_base[@]}"
@@ -346,7 +413,7 @@ _bundle_push_inventory_hosts() {
   local plat tmp ssh_base scp_base ansible_inv hosts inv_name
 
   plat="$(_bundle_platform_from_config)"
-  _stack_image_refs
+  _stack_bundle_refs
 
   ansible_inv="$(_ansible_inv)" || {
     echo "[deploy] ansible-inventory not found. Install: sudo apt install ansible-core  (or pipx install ansible-core)" >&2
@@ -362,7 +429,17 @@ _bundle_push_inventory_hosts() {
   tmp="$(mktemp -d "${TMPDIR:-/tmp}/diy-drone-bundle.XXXXXX")"
   trap 'rm -rf "$tmp"' RETURN
 
-  _bundle_save_images_retry "$plat" "$STACK_STATS" "$tmp/dronebros-stats.tar" "$STACK_HMI" "$tmp/dronebros-hmi.tar" "$STACK_VIDEO" "$tmp/dronebros-video.tar"
+  local -a save_pairs=()
+  local i
+  for i in "${!STACK_BUNDLE_REFS[@]}"; do
+    save_pairs+=("${STACK_BUNDLE_REFS[$i]}" "$tmp/${STACK_BUNDLE_TARS[$i]}")
+  done
+  _bundle_save_images_retry "$plat" "${save_pairs[@]}"
+
+  local -a scp_files=()
+  for t in "${STACK_BUNDLE_TARS[@]}"; do
+    scp_files+=("$tmp/$t")
+  done
 
   # Use ansible-inventory JSON (ansible --list-hosts prints human headers in 2.16+, not plain names).
   # Pass --limit via env: with python -c, argv after the script string is not reliable for this pipeline.
@@ -419,7 +496,7 @@ print(h, u)
     }
     dest="${ssh_user}@${ssh_host}"
     echo "[deploy] bundle ($BUNDLE_SOURCE): copying to $dest ($inv_name)"
-    "${scp_base[@]}" "$tmp/dronebros-stats.tar" "$tmp/dronebros-hmi.tar" "$tmp/dronebros-video.tar" "${dest}:"
+    "${scp_base[@]}" "${scp_files[@]}" "${dest}:"
     echo "[deploy] bundle: loading on $dest"
     _bundle_ssh_load_images "$dest" "${ssh_base[@]}"
   done
