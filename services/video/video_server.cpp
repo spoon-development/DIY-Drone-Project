@@ -124,7 +124,7 @@ bool read_profile_file(const std::filesystem::path& p, CameraProfile& out) {
     out.autofocus_mode = j["autofocus_mode"].get<std::string>();
   if (j.contains("lens_position") && j["lens_position"].is_number())
     out.lens_position = j["lens_position"].get<double>();
-  if (j.contains("pixel_format") && j["pixel_format"].is_string()))
+  if (j.contains("pixel_format") && j["pixel_format"].is_string())
     out.pixel_format = parse_pixel_format(j["pixel_format"].get<std::string>());
   if (out.manufacturer.empty() && out.model.empty() && out.label.find(" - ") != std::string::npos) {
     const auto sep = out.label.find(" - ");
