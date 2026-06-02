@@ -510,8 +510,6 @@
     }
     .video-stage.has-frame .video-mjpeg {
       cursor: pointer;
-      transform: scale(1.035);
-      transform-origin: center center;
     }
     .video-status {
       position: absolute;
@@ -1072,11 +1070,11 @@
         model: "UC60",
       },
       {
-        id: "pi_cam3",
-        label: "Raspberry Pi - Camera Module 3",
+        id: "uc873",
+        label: "Arducam - UC-873",
         interface: "mipi",
-        manufacturer: "Raspberry Pi",
-        model: "Camera Module 3",
+        manufacturer: "Arducam",
+        model: "UC-873",
       },
       {
         id: "pi_cam2",
@@ -1779,11 +1777,11 @@
           (ready.data && (ready.data.reason || ready.data.error)) ||
           "Camera not ready or video service is down.";
         if (
-          (id === "pi_cam2" || id === "pi_cam3") &&
-          /no V4L2|not found|autodetect|video service/i.test(String(msg))
+          (id === "pi_cam2" || id === "uc873") &&
+          /no V4L2|not found|autodetect|video service|expected MIPI sensor|rpicam reports/i.test(String(msg))
         ) {
           msg =
-            "MIPI camera not detected. Check the camera cable and that the Pi sees it (rp1-cfe in v4l2-ctl --list-devices), then try Start live stream again.";
+            "MIPI camera not detected or wrong sensor for this profile. For UC-873 set camera_auto_detect=0 and dtoverlay=imx519,cam0 (or cam1) in /boot/firmware/config.txt, reboot, then verify with rpicam-hello --list-cameras.";
         }
         videoStatus.textContent = String(msg);
         if (videoStage) videoStage.classList.remove("has-frame");

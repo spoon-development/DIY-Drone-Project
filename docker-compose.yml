@@ -1,4 +1,4 @@
-# Optional cameras (V4L2): MIPI (Pi Camera Module 3) or USB (MJPEG). Enable profile `video` via COMPOSE_PROFILES (see stack.yml). Video container is privileged so missing camera nodes do not block compose up.
+# Optional cameras (V4L2): MIPI (rpicam-vid) or USB (MJPEG). Enable profile `video` via COMPOSE_PROFILES (see stack.yml). Video container is privileged so missing camera nodes do not block compose up.
 #
 # This file is what we copy to the Pi: image-only (GHCR), no ./services paths on the device.
 # Local builds use docker-compose.build.yml merged in — see build/build.sh.

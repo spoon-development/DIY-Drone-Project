@@ -14,6 +14,7 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <sstream>
 #include <thread>
 #include <vector>
 
@@ -57,18 +58,25 @@ struct CameraProfile {
   std::string model;
   std::string device{"/dev/video0"};
   std::string device_match;
-  std::string capture;  // empty = v4l2; "rpicam-vid" = Pi libcamera pipeline
+  std::string sensor_match;  // MIPI: match rpicam-hello sensor id (e.g. imx519, imx219)
+  std::string capture;       // empty = v4l2; "rpicam-vid" = Pi libcamera pipeline
   int width{1280};
   int height{720};
   int fps{30};
   PixelFormat pixel_format{PixelFormat::Mjpeg};
   int jpeg_quality{85};
+  std::string autofocus_mode;  // rpicam-vid: manual, auto, continuous
+  double lens_position{-1};    // rpicam-vid manual focus (>=0); 0 ≈ infinity
 };
 
 bool uses_rpicam(const CameraProfile& p) {
   std::string c = p.capture;
   for (char& ch : c) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
   return c == "rpicam-vid" || c == "rpicam";
+}
+
+bool safe_rpicam_af_mode(const std::string& mode) {
+  return mode == "manual" || mode == "auto" || mode == "continuous";
 }
 
 json profile_to_json(const CameraProfile& p) {
@@ -105,12 +113,18 @@ bool read_profile_file(const std::filesystem::path& p, CameraProfile& out) {
   if (j.contains("device") && j["device"].is_string()) out.device = j["device"].get<std::string>();
   if (j.contains("device_match") && j["device_match"].is_string())
     out.device_match = j["device_match"].get<std::string>();
+  if (j.contains("sensor_match") && j["sensor_match"].is_string())
+    out.sensor_match = j["sensor_match"].get<std::string>();
   if (j.contains("capture") && j["capture"].is_string()) out.capture = j["capture"].get<std::string>();
   if (j.contains("width")) out.width = static_cast<int>(j["width"].get<int64_t>());
   if (j.contains("height")) out.height = static_cast<int>(j["height"].get<int64_t>());
   if (j.contains("fps")) out.fps = static_cast<int>(j["fps"].get<int64_t>());
   if (j.contains("jpeg_quality")) out.jpeg_quality = static_cast<int>(j["jpeg_quality"].get<int64_t>());
-  if (j.contains("pixel_format") && j["pixel_format"].is_string())
+  if (j.contains("autofocus_mode") && j["autofocus_mode"].is_string())
+    out.autofocus_mode = j["autofocus_mode"].get<std::string>();
+  if (j.contains("lens_position") && j["lens_position"].is_number())
+    out.lens_position = j["lens_position"].get<double>();
+  if (j.contains("pixel_format") && j["pixel_format"].is_string()))
     out.pixel_format = parse_pixel_format(j["pixel_format"].get<std::string>());
   if (out.manufacturer.empty() && out.model.empty() && out.label.find(" - ") != std::string::npos) {
     const auto sep = out.label.find(" - ");
@@ -342,29 +356,82 @@ ResolvedDevice resolve_device(const CameraProfile& prof) {
   return out;
 }
 
-bool rpicam_camera_ready(std::string& err) {
+std::string trim_copy(const std::string& s) {
+  size_t a = 0;
+  while (a < s.size() && std::isspace(static_cast<unsigned char>(s[a])) != 0) ++a;
+  size_t b = s.size();
+  while (b > a && std::isspace(static_cast<unsigned char>(s[b - 1])) != 0) --b;
+  return s.substr(a, b - a);
+}
+
+struct RpicamProbe {
+  bool ok{false};
+  std::vector<std::string> sensors;
+  std::string err;
+};
+
+RpicamProbe probe_rpicam_cameras() {
+  RpicamProbe out;
   if (::access("/host/usr/bin/rpicam-vid", X_OK) != 0) {
-    err = "rpicam-vid not found on host (mount / at /host for MIPI profiles)";
-    return false;
+    out.err = "rpicam-vid not found on host (mount / at /host for MIPI profiles)";
+    return out;
   }
   FILE* fp = popen("chroot /host /usr/bin/rpicam-hello --list-cameras 2>&1", "r");
   if (!fp) {
-    err = "failed to run rpicam-hello";
-    return false;
+    out.err = "failed to run rpicam-hello";
+    return out;
   }
-  std::string out;
+  std::string raw;
   char buf[512];
-  while (fgets(buf, sizeof(buf), fp)) out += buf;
+  while (fgets(buf, sizeof(buf), fp)) raw += buf;
   const int rc = pclose(fp);
-  if (out.find("No cameras available") != std::string::npos) {
-    err = "rpicam reports no cameras";
+  if (raw.find("No cameras available") != std::string::npos) {
+    out.err = "rpicam reports no cameras";
+    return out;
+  }
+  if (raw.find("Available cameras") == std::string::npos) {
+    out.err = "rpicam-hello failed (exit " + std::to_string(rc) + ")";
+    return out;
+  }
+  std::istringstream iss(raw);
+  std::string line;
+  while (std::getline(iss, line)) {
+    const auto colon = line.find(':');
+    if (colon == std::string::npos || colon == 0) continue;
+    const std::string idx = trim_copy(line.substr(0, colon));
+    if (idx.empty() || !std::all_of(idx.begin(), idx.end(),
+                                      [](unsigned char c) { return std::isdigit(c) != 0; }))
+      continue;
+    const std::string rest = trim_copy(line.substr(colon + 1));
+    const auto bracket = rest.find('[');
+    if (bracket == std::string::npos) continue;
+    const std::string sensor = trim_copy(rest.substr(0, bracket));
+    if (!sensor.empty()) out.sensors.push_back(sensor);
+  }
+  if (out.sensors.empty()) {
+    out.err = "rpicam-hello listed cameras but no sensor id was parsed";
+    return out;
+  }
+  out.ok = true;
+  return out;
+}
+
+bool rpicam_profile_ready(const CameraProfile& prof, std::string& err) {
+  const RpicamProbe probe = probe_rpicam_cameras();
+  if (!probe.ok) {
+    err = probe.err;
     return false;
   }
-  if (out.find("Available cameras") == std::string::npos) {
-    err = "rpicam-hello failed (exit " + std::to_string(rc) + ")";
-    return false;
+  if (prof.sensor_match.empty()) return true;
+  for (const auto& sensor : probe.sensors) {
+    if (icontains(sensor, prof.sensor_match)) return true;
   }
-  return true;
+  err = "expected MIPI sensor " + prof.sensor_match + " but rpicam reports: ";
+  for (size_t i = 0; i < probe.sensors.size(); ++i) {
+    if (i) err += ", ";
+    err += probe.sensors[i];
+  }
+  return false;
 }
 
 /** Pi MIPI: libcamera pipeline via rpicam-vid stdout (MJPEG). */
@@ -378,12 +445,18 @@ class RpicamCapture {
   RpicamCapture& operator=(const RpicamCapture&) = delete;
   ~RpicamCapture() { shutdown(); }
 
-  bool start(int want_w, int want_h, int fps, std::string& err) {
+  bool start(const CameraProfile& prof, std::string& err) {
     shutdown();
-    const int fr = fps > 0 ? fps : 30;
-    const std::string cmd = std::string("chroot /host /usr/bin/rpicam-vid -n --codec mjpeg -o - --width ") +
-                            std::to_string(want_w) + " --height " + std::to_string(want_h) + " --framerate " +
-                            std::to_string(fr) + " -t 0 2>/dev/null";
+    const int fr = prof.fps > 0 ? prof.fps : 30;
+    const int q = std::clamp(prof.jpeg_quality, 40, 95);
+    std::string cmd = std::string("chroot /host /usr/bin/rpicam-vid -n --codec mjpeg -o - --width ") +
+                      std::to_string(prof.width) + " --height " + std::to_string(prof.height) + " --framerate " +
+                      std::to_string(fr) + " -q " + std::to_string(q);
+    if (!prof.autofocus_mode.empty() && safe_rpicam_af_mode(prof.autofocus_mode))
+      cmd += " --autofocus-mode " + prof.autofocus_mode;
+    if (prof.lens_position >= 0.0)
+      cmd += " --lens-position " + std::to_string(prof.lens_position);
+    cmd += " -t 0 2>/dev/null";
     fp_ = popen(cmd.c_str(), "r");
     if (!fp_) {
       err = "popen rpicam-vid failed";
@@ -731,7 +804,7 @@ int main() {
     }
     if (uses_rpicam(*prof)) {
       std::string err;
-      if (!rpicam_camera_ready(err)) {
+      if (!rpicam_profile_ready(*prof, err)) {
         json j = {{"ok", false}, {"reason", err}};
         res.set_content(j.dump(), "application/json; charset=utf-8");
         return;
@@ -786,7 +859,7 @@ int main() {
     if (uses_rpicam(prof_copy)) {
       sess->use_rpicam = true;
       sess->rpicam = std::make_unique<RpicamCapture>();
-      if (!sess->rpicam->start(prof_copy.width, prof_copy.height, prof_copy.fps, err)) {
+      if (!sess->rpicam->start(prof_copy, err)) {
         res.status = 503;
         json j = {{"error", err}};
         res.set_content(j.dump(), "application/json; charset=utf-8");

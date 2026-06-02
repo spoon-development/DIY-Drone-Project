@@ -1,0 +1,15 @@
+{
+  "id": "uc873",
+  "label": "Arducam - UC-873",
+  "interface": "mipi",
+  "manufacturer": "Arducam",
+  "model": "UC-873",
+  "capture": "rpicam-vid",
+  "sensor_match": "imx519",
+  "autofocus_mode": "continuous",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "pixel_format": "mjpeg",
+  "jpeg_quality": 92
+}

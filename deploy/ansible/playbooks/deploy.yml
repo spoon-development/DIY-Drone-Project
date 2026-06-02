@@ -89,31 +89,31 @@
       ansible.builtin.set_fact:
         pi_boot_config: "{{ (boot_config_stats.results | selectattr('stat.exists') | map(attribute='item') | list | first) | default('', true) }}"
 
-    - name: Enable Raspberry Pi Camera Module 3 (MIPI) in boot config
+    - name: Enable MIPI camera overlay in boot config
       when:
         - (mipi_camera_configure | default(false)) | bool
         - pi_boot_config | length > 0
       become: true
       block:
-        - name: Disable camera auto-detect (explicit Module 3 overlay)
+        - name: Disable camera auto-detect (explicit sensor overlay)
           ansible.builtin.replace:
             path: "{{ pi_boot_config }}"
             regexp: '^camera_auto_detect=1'
             replace: 'camera_auto_detect=0'
           register: mipi_autodetect
 
-        - name: Ensure imx708 overlay for CSI port
+        - name: Ensure MIPI sensor overlay for CSI port
           ansible.builtin.lineinfile:
             path: "{{ pi_boot_config }}"
-            regexp: '^dtoverlay=imx708'
-            line: "dtoverlay={{ mipi_camera_overlay | default('imx708,cam1') }}"
+            regexp: '^dtoverlay=(imx519|imx219|imx708|ov5647)'
+            line: "dtoverlay={{ mipi_camera_overlay | default('imx519,cam0') }}"
             insertafter: '^\[all\]'
           register: mipi_overlay
 
         - name: Reboot Pi after MIPI camera boot config change
           ansible.builtin.reboot:
             reboot_timeout: 600
-            msg: "Drone Bros enabled Raspberry Pi Camera Module 3 (MIPI)"
+            msg: "Drone Bros enabled MIPI camera overlay"
           when:
             - (mipi_camera_reboot | default(true)) | bool
             - mipi_autodetect.changed or mipi_overlay.changed

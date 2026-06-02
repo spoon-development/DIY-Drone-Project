@@ -24,9 +24,14 @@ fc_serial_baud: 921600
 # ArduPilot SR{N}_* port index for the Pi UART (often 1 = TELEM1, not 0 = USB).
 fc_mavlink_sr_port: 1
 
-# MIPI boot config (imx708 overlay in /boot/firmware/config.txt) — OFF by default.
-# Deploy only ships containers; it does not edit Pi firmware. CSI cameras need a one-time
-# OS/boot setup on the Pi (see docs or README) before MIPI works — same as any Pi project.
+# MIPI boot config (dtoverlay in /boot/firmware/config.txt) — OFF by default.
+# Deploy only ships containers; it does not edit Pi firmware. Third-party MIPI modules
+# (e.g. Arducam UC-873 / IMX519) need a one-time OS/boot setup on the Pi before MIPI works.
 mipi_camera_configure: false
-# mipi_camera_overlay: imx708,cam1
+# mipi_camera_overlay: imx519,cam1   # Arducam UC-873 (16MP IMX519); use cam0/cam1 for CSI port
+# After first boot with imx519, install AF tuning on Ubuntu (stock imx519.json has no rpi.af):
+#   sudo cp /usr/share/libcamera/ipa/rpi/pisp/imx519.json{,.bak}
+#   sudo curl -fsSL -o /usr/share/libcamera/ipa/rpi/pisp/imx519.json \
+#     https://raw.githubusercontent.com/ArduCAM/libcamera/arducam/src/ipa/rpi/pisp/data/imx519.json
+# mipi_camera_overlay: imx219,cam1   # Pi Camera Module 2.1
 # mipi_camera_reboot: true
