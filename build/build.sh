@@ -142,6 +142,7 @@ platform_buildx() {
   for svc in "$@"; do
     img="$(image_for_svc "$svc")"
     echo "[build] buildx $img ($PLATFORM_BUILD)"
+    docker rmi -f "$img" 2>/dev/null || true
     docker buildx build --platform "$PLATFORM_BUILD" -t "$img" --load "${ROOT}/services/${svc}"
   done
 }
