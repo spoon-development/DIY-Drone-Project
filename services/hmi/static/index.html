@@ -2479,7 +2479,9 @@
         psk: d.wifi.psk || "",
       };
       setNetworkFormValues(lan, wifi);
-      persistNetDraftLocal({ lan, wifi });
+      // Never save live IPs to draft — they come from stats on every load.
+      // Persisting them creates a stale-value cycle if stats later reports wrong data.
+      persistNetDraftLocal({ lan: { ...lan, ip: "" }, wifi: { ...wifi, ip: "" } });
       const pskEl = document.getElementById("nf-wifi-psk");
       if (pskEl && !wifi.psk && net && net.wifi_has_password) {
         pskEl.placeholder = "Password configured — enter new to change";

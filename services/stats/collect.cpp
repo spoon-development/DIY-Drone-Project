@@ -439,11 +439,114 @@ std::map<std::string, std::string> host_ipv4_from_systemd_netif(const std::strin
   return out;
 }
 
+// Reads LOCAL /32 IPs from /host/proc/1/net/fib_trie and matches them to
+// interfaces via subnet routes in /host/proc/1/net/route. Always reflects the
+// current kernel state — no stale DHCP lease data like systemd-netif has when
+// an interface switches from DHCP to static config.
+std::map<std::string, std::string> host_ipv4_from_fib_trie(const std::string& host_proc,
+                                                            const std::vector<IfaceRow>& ifaces) {
+  // Step 1: collect subnet→iface entries from proc route (skip default route)
+  struct SubnetEntry {
+    uint32_t network;
+    uint32_t mask;
+    std::string iface;
+  };
+  std::vector<SubnetEntry> subnets;
+  for (const auto& path : proc_route_paths(host_proc)) {
+    auto text = read_file(path);
+    if (!text) continue;
+    std::istringstream iss(*text);
+    std::string line;
+    if (!std::getline(iss, line)) continue;
+    while (std::getline(iss, line)) {
+      std::istringstream ls(line);
+      std::vector<std::string> parts;
+      std::string w;
+      while (ls >> w) parts.push_back(w);
+      if (parts.size() < 8) continue;
+      if (is_virtual_iface(parts[0])) continue;
+      try {
+        auto dest = static_cast<uint32_t>(std::stoul(parts[1], nullptr, 16));
+        auto mask = static_cast<uint32_t>(std::stoul(parts[7], nullptr, 16));
+        if (dest == 0 && mask == 0) continue;
+        subnets.push_back({dest, mask, parts[0]});
+      } catch (...) {
+      }
+    }
+    if (!subnets.empty()) break;
+  }
+  if (subnets.empty()) return {};
+
+  // Step 2: collect LOCAL /32 host addresses from fib_trie
+  std::vector<std::string> local_ips;
+  for (const auto& path :
+       std::initializer_list<std::string>{host_proc + "/1/net/fib_trie", host_proc + "/net/fib_trie"}) {
+    auto text = read_file(path);
+    if (!text) continue;
+    std::istringstream iss(*text);
+    std::string line, pending;
+    while (std::getline(iss, line)) {
+      auto p = line.find("|-- ");
+      if (p != std::string::npos) {
+        pending.clear();
+        std::string cand = line.substr(p + 4);
+        trim_inplace(cand);
+        if (cand.find('.') != std::string::npos && cand.find('/') == std::string::npos)
+          pending = cand;
+      } else if (!pending.empty()) {
+        if (line.find("/32") != std::string::npos && line.find("LOCAL") != std::string::npos)
+          local_ips.push_back(pending);
+        pending.clear();
+      }
+    }
+    if (!local_ips.empty()) break;
+  }
+
+  // Step 3: match each LOCAL IP to an interface via longest-prefix subnet match.
+  // IPs and route values share the same little-endian octet encoding: byte 0 = first octet.
+  std::map<std::string, std::string> out;
+  for (const auto& ip_str : local_ips) {
+    uint32_t ip_val = 0;
+    int shift = 0;
+    std::istringstream is2(ip_str);
+    std::string octet;
+    bool valid = true;
+    while (std::getline(is2, octet, '.')) {
+      if (shift >= 32) {
+        valid = false;
+        break;
+      }
+      try {
+        uint32_t o = std::stoul(octet);
+        if (o > 255) {
+          valid = false;
+          break;
+        }
+        ip_val |= (o << shift);
+        shift += 8;
+      } catch (...) {
+        valid = false;
+        break;
+      }
+    }
+    if (!valid || shift != 32 || ip_val == 0 || ip_val == 0x0100007Fu) continue;
+    const SubnetEntry* best = nullptr;
+    for (const auto& s : subnets) {
+      if ((ip_val & s.mask) == s.network) {
+        if (!best || s.mask > best->mask) best = &s;
+      }
+    }
+    if (best && !out.count(best->iface)) out[best->iface] = ip_str;
+  }
+  return out;
+}
+
 std::map<std::string, std::string> host_ipv4_by_iface(const std::string& host_proc,
                                                       const std::string& host_sys,
                                                       const std::string& host_root,
                                                       const std::vector<IfaceRow>& ifaces) {
   auto out = host_ipv4_via_setns(host_proc);
+  if (out.empty()) out = host_ipv4_from_fib_trie(host_proc, ifaces);
   if (out.empty()) out = host_ipv4_from_systemd_netif(host_sys, host_root, ifaces);
   return out;
 }
