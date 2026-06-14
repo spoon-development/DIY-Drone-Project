@@ -16,6 +16,7 @@ services:
     restart: unless-stopped
     cap_add:
       - SYS_ADMIN
+      - NET_ADMIN
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9101/health"]
       interval: 5s

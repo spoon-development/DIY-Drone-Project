@@ -562,6 +562,40 @@ struct WifiNetplanInfo {
   bool has_password = false;
 };
 
+std::optional<WifiNetplanInfo> parse_wifi_from_nm(const std::string& host_root) {
+  const std::string dir = host_root + "/etc/NetworkManager/system-connections";
+  if (!fs::is_directory(dir)) return std::nullopt;
+  for (const auto& e : fs::directory_iterator(dir)) {
+    if (!e.is_regular_file()) continue;
+    auto text = read_file(e.path().string());
+    if (!text) continue;
+    std::string ssid, psk;
+    bool in_wifi = false, in_sec = false;
+    std::istringstream iss(*text);
+    std::string line;
+    while (std::getline(iss, line)) {
+      if (!line.empty() && line.back() == '\r') line.pop_back();
+      std::string tl = line;
+      for (auto& c : tl) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      if (tl == "[wifi]") { in_wifi = true; in_sec = false; continue; }
+      if (tl == "[wifi-security]") { in_sec = true; in_wifi = false; continue; }
+      if (!tl.empty() && tl.front() == '[') { in_wifi = false; in_sec = false; continue; }
+      auto eq = line.find('=');
+      if (eq == std::string::npos) continue;
+      std::string key = line.substr(0, eq);
+      std::string val = line.substr(eq + 1);
+      trim_inplace(key);
+      trim_inplace(val);
+      std::string kl = key;
+      for (auto& c : kl) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      if (in_wifi && kl == "ssid") ssid = val;
+      if (in_sec && (kl == "psk" || kl == "psk-flags")) { if (kl == "psk") psk = val; }
+    }
+    if (!ssid.empty()) return WifiNetplanInfo{ssid, !psk.empty()};
+  }
+  return std::nullopt;
+}
+
 std::optional<WifiNetplanInfo> parse_wifi_from_netplan(const std::string& host_root) {
   for (const auto& path : sorted_netplan_paths(host_root)) {
     auto text = read_file(path);
@@ -627,7 +661,8 @@ nlohmann::json network_summary(const std::string& host_proc, const std::string& 
   auto all_defaults = default_routes_from_proc(host_proc);
   auto route = default_ipv4_route(host_proc);
   auto netplan = grep_netplan_hints(host_root);
-  auto wifi_netplan = parse_wifi_from_netplan(host_root);
+  auto wifi_netplan = parse_wifi_from_nm(host_root);
+  if (!wifi_netplan) wifi_netplan = parse_wifi_from_netplan(host_root);
   auto dhcpcd_arr = grep_dhcpcd_hints(host_root);
   std::vector<std::string> dhcpcd;
   if (dhcpcd_arr.is_array()) {
