@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ssh -o StrictHostKeyChecking=no drone@10.10.69.2 \"cat /boot/firmware/config.txt\")",
+      "Bash(ssh-keygen -R 10.10.69.2)",
+      "Bash(ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N \"\")",
+      "Bash(ssh-copy-id drone@10.10.69.2)",
+      "Read(//c/Users/als00/.ssh/**)",
+      "Bash(ssh drone@10.10.69.2 \"sudo reboot\")",
+      "Bash(ssh drone@10.10.69.2 \"v4l2-ctl --list-devices 2>&1 && echo '---' && sudo dmesg | grep -i 'imx519\\\\|arducam\\\\|cam' | head -20\")",
+      "Bash(ssh -o ConnectTimeout=5 drone@10.10.69.2 \"echo up\")",
+      "Bash(ssh drone@10.10.69.2 \"cat /proc/device-tree/model 2>/dev/null || echo unknown\")",
+      "Read(//mnt/c/Users/als00/DIY-Drone-Project/services/**)"
+    ]
+  }
+}

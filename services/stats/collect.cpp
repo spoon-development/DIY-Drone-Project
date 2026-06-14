@@ -264,7 +264,8 @@ std::tuple<int, int, std::string> sort_key_for_iface(const IfaceRow& x) {
   int medium = 2;
   std::string nl = name;
   for (auto& c : nl) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-  if (nl.rfind("en", 0) == 0 || nl.rfind("end", 0) == 0 || nl.rfind("eth", 0) == 0 || nl.rfind("usb", 0) == 0)
+  bool ends_eth = nl.size() > 4 && nl.rfind(".eth") == nl.size() - 4;
+  if (nl.rfind("en", 0) == 0 || nl.rfind("end", 0) == 0 || nl.rfind("eth", 0) == 0 || nl.rfind("usb", 0) == 0 || ends_eth)
     medium = 0;
   else if (nl.rfind("wl", 0) == 0)
     medium = 1;

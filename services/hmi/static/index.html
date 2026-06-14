@@ -2283,7 +2283,7 @@
     function classifyNetworkIface(name) {
       const n = String(name || "").toLowerCase();
       if (/^wl/.test(n)) return "wifi";
-      if (/^(eth|en|end|usb)/.test(n)) return "lan";
+      if (/^(eth|en|end|usb)/.test(n) || /\.eth$/.test(n)) return "lan";
       return "other";
     }
 
