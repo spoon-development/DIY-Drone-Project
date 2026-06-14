@@ -557,6 +557,46 @@ nlohmann::json grep_netplan_hints(const std::string& host_root) {
   return out;
 }
 
+struct WifiNetplanInfo {
+  std::string ssid;
+  bool has_password = false;
+};
+
+std::optional<WifiNetplanInfo> parse_wifi_from_netplan(const std::string& host_root) {
+  for (const auto& path : sorted_netplan_paths(host_root)) {
+    auto text = read_file(path);
+    if (!text) continue;
+    std::istringstream iss(*text);
+    std::string line;
+    bool in_ap = false;
+    int ap_indent = -1;
+    std::string ssid;
+    bool has_pw = false;
+    while (std::getline(iss, line)) {
+      if (!line.empty() && line.back() == '\r') line.pop_back();
+      int indent = 0;
+      for (char c : line) { if (c == ' ') indent++; else break; }
+      std::string trimmed = line.substr(static_cast<size_t>(indent));
+      if (trimmed.empty() || trimmed.front() == '#') continue;
+      std::string tl = trimmed;
+      for (auto& c : tl) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      if (tl == "access-points:") { in_ap = true; ap_indent = indent; ssid.clear(); has_pw = false; continue; }
+      if (in_ap) {
+        if (indent <= ap_indent) { if (!ssid.empty()) return WifiNetplanInfo{ssid, has_pw}; in_ap = false; continue; }
+        if (ssid.empty() && indent == ap_indent + 4) {
+          // SSID is the key: "My Network": or My-Network:
+          auto key = trimmed.substr(0, trimmed.find(':'));
+          if (!key.empty() && key.front() == '"' && key.back() == '"') key = key.substr(1, key.size() - 2);
+          if (!key.empty()) ssid = key;
+        }
+        if (!ssid.empty() && (tl.rfind("password:", 0) == 0 || tl.rfind("psk:", 0) == 0)) has_pw = true;
+      }
+    }
+    if (!ssid.empty()) return WifiNetplanInfo{ssid, has_pw};
+  }
+  return std::nullopt;
+}
+
 nlohmann::json grep_dhcpcd_hints(const std::string& host_root) {
   nlohmann::json out = nlohmann::json::array();
   auto text = read_file(host_root + "/etc/dhcpcd.conf");
@@ -587,6 +627,7 @@ nlohmann::json network_summary(const std::string& host_proc, const std::string& 
   auto all_defaults = default_routes_from_proc(host_proc);
   auto route = default_ipv4_route(host_proc);
   auto netplan = grep_netplan_hints(host_root);
+  auto wifi_netplan = parse_wifi_from_netplan(host_root);
   auto dhcpcd_arr = grep_dhcpcd_hints(host_root);
   std::vector<std::string> dhcpcd;
   if (dhcpcd_arr.is_array()) {
@@ -645,7 +686,9 @@ nlohmann::json network_summary(const std::string& host_proc, const std::string& 
                         {"config_hints", nlohmann::json{{"netplan", netplan}, {"dhcpcd", dhcpcd_json}}},
                         {"primary_ipv4_hint", primary ? nlohmann::json(*primary) : nlohmann::json(nullptr)},
                         {"lan_ipv4", lan_ipv4 ? nlohmann::json(*lan_ipv4) : nlohmann::json(nullptr)},
-                        {"wifi_ipv4", wifi_ipv4 ? nlohmann::json(*wifi_ipv4) : nlohmann::json(nullptr)}};
+                        {"wifi_ipv4", wifi_ipv4 ? nlohmann::json(*wifi_ipv4) : nlohmann::json(nullptr)},
+                        {"wifi_ssid", wifi_netplan ? nlohmann::json(wifi_netplan->ssid) : nlohmann::json(nullptr)},
+                        {"wifi_has_password", wifi_netplan ? nlohmann::json(wifi_netplan->has_password) : nlohmann::json(nullptr)}};
 }
 
 }  // namespace

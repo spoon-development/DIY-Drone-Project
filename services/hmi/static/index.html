@@ -2296,6 +2296,13 @@
     function findNetworkIfaceRow(net, kind) {
       const rows = Array.isArray(net && net.interfaces) ? net.interfaces : [];
       const matches = rows.filter((row) => classifyNetworkIface(row.name) === kind);
+      // Prefer whichever interface the backend selected as the primary IP for this kind.
+      // This ensures the frontend and backend agree on which iface is "the" LAN/wifi iface.
+      const preferredIp = kind === "lan" ? (net && net.lan_ipv4) : kind === "wifi" ? (net && net.wifi_ipv4) : null;
+      if (preferredIp) {
+        const hit = matches.find((row) => row.ipv4 === preferredIp);
+        if (hit) return hit;
+      }
       matches.sort((a, b) => {
         const sa = ifaceLinkScore(a);
         const sb = ifaceLinkScore(b);
@@ -2459,20 +2466,24 @@
       const wifiRow = findNetworkIfaceRow(net, "wifi");
       const lan = {
         iface: d.lan.iface || (lanRow && lanRow.name) || guessLanIfaceName(net),
-        ip: d.lan.ip || net.lan_ipv4 || "",
+        ip: net.lan_ipv4 || d.lan.ip || "",
         netmask: d.lan.netmask || "255.255.255.0",
         gateway: d.lan.gateway || dr.gateway || "",
       };
       const wifi = {
         iface: d.wifi.iface || (wifiRow && wifiRow.name) || guessWifiIfaceName(net),
-        ip: d.wifi.ip || net.wifi_ipv4 || "",
+        ip: net.wifi_ipv4 || d.wifi.ip || "",
         netmask: d.wifi.netmask || "255.255.255.0",
         gateway: d.wifi.gateway || dr.gateway || "",
-        ssid: d.wifi.ssid || "",
+        ssid: d.wifi.ssid || (net && net.wifi_ssid) || "",
         psk: d.wifi.psk || "",
       };
       setNetworkFormValues(lan, wifi);
       persistNetDraftLocal({ lan, wifi });
+      const pskEl = document.getElementById("nf-wifi-psk");
+      if (pskEl && !wifi.psk && net && net.wifi_has_password) {
+        pskEl.placeholder = "Password configured — enter new to change";
+      }
     }
 
     function formatNetworkStatusLine(label, row, ipv4Hint) {
