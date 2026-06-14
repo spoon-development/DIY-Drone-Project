@@ -55,6 +55,16 @@ context_hash() {
   done | sha256sum | awk '{print $1}')
 }
 
+hash_file() {
+  local svc="$1"
+  if [[ -n "$PLATFORM_BUILD" ]]; then
+    local suffix="${PLATFORM_BUILD//\//-}"
+    echo "${HASH_DIR}/built-${svc}-${suffix}.sha256"
+  else
+    echo "${HASH_DIR}/built-${svc}.sha256"
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help)
@@ -159,7 +169,8 @@ for svc in "${SERVICES[@]}"; do
   h="$(context_hash "$svc" || true)"
   if [[ "$SKIP_UNCHANGED" == "1" && "$FORCE" != "1" && -n "$h" ]]; then
     prev=""
-    [[ -f "$HASH_DIR/built-${svc}.sha256" ]] && prev="$(cat "$HASH_DIR/built-${svc}.sha256")"
+    hf="$(hash_file "$svc")"
+    [[ -f "$hf" ]] && prev="$(cat "$hf")"
     if [[ "$h" == "$prev" ]]; then
       echo "[build] skip $svc (unchanged since last build; use --force to rebuild)"
       continue
@@ -177,5 +188,5 @@ compose_build "${TO_BUILD[@]}"
 
 for svc in "${TO_BUILD[@]}"; do
   h="$(context_hash "$svc" || true)"
-  [[ -n "$h" ]] && printf '%s' "$h" >"$HASH_DIR/built-${svc}.sha256"
+  [[ -n "$h" ]] && printf '%s' "$h" >"$(hash_file "$svc")"
 done
