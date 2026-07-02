@@ -133,8 +133,7 @@
     /* Pill reflects the HMI → stats feed; network Apply is gated on “live” so we don’t guess the iface. */
     .pill.degraded { background: rgba(251, 191, 36, 0.12); color: #fcd34d; border: 1px solid rgba(251, 191, 36, 0.38); }
     article.network-gated .net-grid {
-      opacity: 0.55;
-      pointer-events: none;
+      opacity: 0.85;
     }
     .clock { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.88rem; }
 
@@ -874,7 +873,7 @@
           <div class="net-grid two">
             <div class="field">
               <label for="nf-lan-ip">IP address</label>
-              <input id="nf-lan-ip" type="text" inputmode="numeric" autocomplete="off" placeholder="192.168.0.53" />
+              <input id="nf-lan-ip" type="text" inputmode="numeric" autocomplete="off" placeholder="e.g. 192.168.0.100" />
             </div>
             <div class="field">
               <label for="nf-lan-netmask">Netmask</label>
@@ -917,6 +916,39 @@
           </div>
         </article>
 
+        <article class="card settings-card" id="hotspot-card">
+          <h2>Hotspot</h2>
+          <p class="settings-hint">DroneNet — Alfa USB adapter broadcasting a Wi-Fi access point on wlan1.</p>
+          <p class="iface-status" id="hs-status">Checking…</p>
+          <div class="net-grid two">
+            <div class="field" style="grid-column: 1 / -1">
+              <label for="hs-ssid">SSID</label>
+              <input id="hs-ssid" type="text" autocomplete="off" placeholder="DroneNet" />
+            </div>
+            <div class="field" style="grid-column: 1 / -1">
+              <label for="hs-psk">Password</label>
+              <input id="hs-psk" type="password" autocomplete="off" placeholder="Min 8 characters" />
+            </div>
+            <div class="field">
+              <label for="hs-ip">Gateway IP</label>
+              <input id="hs-ip" type="text" inputmode="numeric" autocomplete="off" placeholder="10.0.69.1" />
+            </div>
+            <div class="field">
+              <label for="hs-channel">Channel</label>
+              <input id="hs-channel" type="number" min="1" max="14" autocomplete="off" placeholder="6" />
+            </div>
+            <div class="field" style="grid-column: 1 / -1">
+              <label for="hs-iface">Interface</label>
+              <input id="hs-iface" type="text" autocomplete="off" placeholder="wlan1" />
+            </div>
+          </div>
+          <p class="sub" id="hs-apply-status" style="min-height: 1.35em; margin-top: 0.75rem" aria-live="polite"></p>
+          <div class="dlg-actions" style="margin-top: 0.35rem">
+            <button type="button" class="primary" id="hs-enable">Enable Hotspot</button>
+            <button type="button" id="hs-disable">Disable Hotspot</button>
+          </div>
+        </article>
+
         <article class="card settings-card">
           <h2>Appearance</h2>
           <p class="settings-hint">Background image (optional). Large files may fail — try under ~8&nbsp;MB.</p>
@@ -942,7 +974,13 @@
         <article class="card settings-card">
           <h2>Notes</h2>
           <p class="settings-hint">
-            Apply network writes netplan and runs netplan apply on the host (no automatic reboot). Wrong settings can drop SSH — use a console when testing. Copy steps is a manual fallback.
+            Apply network updates Ethernet via NetworkManager on the Pi (nmcli on Pi OS). Leave Ethernet gateway empty when Wi‑Fi carries internet, or when your PC is plugged straight into the Pi with no router.
+          </p>
+          <p class="settings-hint">
+            <strong>Direct Ethernet (PC ↔ Pi, no router):</strong> pick any two addresses on the same subnet — e.g. Pi <code>10.10.69.1</code> and your PC <code>10.10.69.2</code> (both netmask <code>255.255.255.0</code>, no gateway). After Apply, open the HMI at the <em>new</em> Pi IP (<code>http://&lt;new-ip&gt;:8080</code>) and set your PC’s Ethernet adapter to the other address. Keep Wi‑Fi up as a fallback while testing.
+          </p>
+          <p class="settings-hint">
+            Wrong settings can drop the link — use Wi‑Fi SSH or a local console when testing. Copy steps is a manual fallback if Apply fails.
           </p>
         </article>
       </div>
@@ -976,6 +1014,7 @@
     /** Set on the Pi via DISPLAY_HOSTNAME in .env (Ansible runs `hostname` at deploy). */
     let deployHostLabel = "";
     let netFormSeeded = false;
+    let netFormDirty = false;
     let pendingBgDataUrl = null;
     let lastBgState = null;
     let videoCameraProfile = "uc60";
@@ -1955,11 +1994,11 @@
       }
     });
 
-    function buildNetplanYaml() {
-      const f = collectNetForm();
+    function buildNetplanYaml(formOverride) {
+      const f = formOverride || collectNetForm();
       const net = lastMetrics && lastMetrics.network ? lastMetrics.network : {};
-      const lines = ["# Network (from HMI)", "network:", "  version: 2"];
-      const ethYaml = buildEthernetNetplan(f.lan);
+      const lines = ["# Network (from HMI)", "network:", "  version: 2", "  renderer: NetworkManager"];
+      const ethYaml = buildEthernetNetplan(f.lan, net);
       const wifiIp = (f.wifi.ip || "").trim();
       let wifiYaml = "";
       if (wifiIp) {
@@ -1983,18 +2022,31 @@
       return `  wifis:\n    ${iface}:\n      dhcp4: true\n`;
     }
 
-    function buildEthernetNetplan(lan) {
+    function ethernetWantsDefaultRoute(lan, net) {
+      const ip = (lan.ip || "").trim();
+      const gw = (lan.gateway || "").trim();
+      if (!gw || gw === ip) return false;
+      const wifiRow = findNetworkIfaceRow(net, "wifi");
+      if (net.wifi_ipv4 || ifaceIsActive(wifiRow, net.wifi_ipv4)) return false;
+      return true;
+    }
+
+    function buildEthernetNetplan(lan, net) {
       const ip = (lan.ip || "").trim();
       if (!ip) return "";
       const iface = lan.iface || "eth0";
       const prefix = netmaskToPrefix(lan.netmask || "255.255.255.0");
       const cidr = `${ip}/${prefix}`;
-      const gw = (lan.gateway || "").trim() || "192.168.0.1";
-      return (
-        `  ethernets:\n    ${iface}:\n      dhcp4: false\n` +
-        `      addresses:\n        - ${cidr}\n` +
-        `      routes:\n        - to: default\n          via: ${gw}\n          metric: 100\n`
-      );
+      const gw = (lan.gateway || "").trim();
+      let block =
+        `  ethernets:\n    ${iface}:\n` +
+        `      dhcp4: false\n` +
+        `      dhcp6: false\n` +
+        `      addresses:\n        - ${cidr}\n`;
+      if (ethernetWantsDefaultRoute(lan, net)) {
+        block += `      routes:\n        - to: default\n          via: ${gw}\n          metric: 100\n`;
+      }
+      return block;
     }
 
     function buildWifiNetplan(wifi) {
@@ -2003,17 +2055,55 @@
       const iface = wifi.iface || "wlan0";
       const prefix = netmaskToPrefix(wifi.netmask || "255.255.255.0");
       const cidr = `${ip}/${prefix}`;
-      const gw = (wifi.gateway || "").trim() || "192.168.0.1";
+      const gw = (wifi.gateway || "").trim();
       const ssid = (wifi.ssid || "").trim();
       const psk = (wifi.psk || "").trim();
       const apKey = JSON.stringify(ssid || "YOUR_WIFI_NAME");
       const apPass = JSON.stringify(psk || "YOUR_WIFI_PASSWORD");
-      return (
+      let block =
         `  wifis:\n    ${iface}:\n      dhcp4: false\n` +
-        `      addresses:\n        - ${cidr}\n` +
-        `      routes:\n        - to: default\n          via: ${gw}\n          metric: 600\n` +
-        `      access-points:\n        ${apKey}:\n          password: ${apPass}\n`
-      );
+        `      addresses:\n        - ${cidr}\n`;
+      if (gw) {
+        block += `      routes:\n        - to: default\n          via: ${gw}\n          metric: 600\n`;
+      }
+      block += `      access-points:\n        ${apKey}:\n          password: ${apPass}\n`;
+      return block;
+    }
+
+    function sleep(ms) {
+      return new Promise((resolve) => window.setTimeout(resolve, ms));
+    }
+
+    async function verifyNetworkApply(requestedLanIp, requestedWifiIp) {
+      await sleep(2500);
+      try {
+        const res = await fetch("/api/stats", { cache: "no-store" });
+        if (!res.ok) return { ok: false, reason: "Could not verify — stats feed unavailable." };
+        const data = await res.json();
+        lastMetrics = data;
+        syncNetFormFromMetrics();
+        refreshNetworkGate();
+        const net = data.network || {};
+        const liveLan = resolvedLanIpv4(net);
+        const liveWifi = net.wifi_ipv4 || "";
+        const wantLan = (requestedLanIp || "").trim();
+        const wantWifi = (requestedWifiIp || "").trim();
+        if (wantLan && liveLan && liveLan !== wantLan) {
+          return {
+            ok: false,
+            reason: `Ethernet still reports ${liveLan} (you requested ${wantLan}). If you use a direct PC↔Pi cable, set your PC Ethernet to another address on the same subnet (e.g. Pi ${wantLan} → PC a different .x), then open http://${wantLan}:8080.`,
+          };
+        }
+        if (wantWifi && liveWifi && liveWifi !== wantWifi) {
+          return {
+            ok: false,
+            reason: `Wi-Fi still reports ${liveWifi} (you requested ${wantWifi}).`,
+          };
+        }
+        return { ok: true };
+      } catch {
+        return { ok: false, reason: "Could not verify the new address — check the status line above." };
+      }
     }
 
     function buildSshApplyScript() {
@@ -2022,7 +2112,12 @@
         `# Requires jq on the Pi host (apt install jq).\n` +
         `sudo jq -r '.netplanYaml // empty' "$BASE/hmi-data/hmi-settings.json" > /tmp/hmi-net.yaml\n` +
         `sudo install -m 600 /tmp/hmi-net.yaml /etc/netplan/99-drone-hmi.yaml\n` +
-        `sudo netplan apply\n` +
+        `# Pi OS with NetworkManager: apply eth0 via nmcli (netplan apply often fails on 90-NM-*.yaml hosts).\n` +
+        `IF=eth0\n` +
+        `ADDR=$(awk '/addresses:/{getline; gsub(/[^0-9.\\/]/,"",$0); print $0; exit}' /tmp/hmi-net.yaml)\n` +
+        `UUID=$(nmcli -g GENERAL.CON-UUID device show "$IF" 2>/dev/null | head -n1)\n` +
+        `sudo nmcli connection modify "$UUID" ipv4.method manual ipv4.addresses "$ADDR" ipv4.gateway '' ipv4.never-default yes\n` +
+        `sudo nmcli connection up "$UUID" || sudo nmcli device reapply "$IF"\n` +
         `sudo systemctl restart NetworkManager 2>/dev/null || true\n`
       );
     }
@@ -2044,12 +2139,11 @@
         networkApplyStatus.textContent = "Wi-Fi needs a network name and password when a wireless IP is set.";
         return;
       }
-      const netplanYaml = buildNetplanYaml();
-      try {
-        localStorage.setItem(LS_NET, JSON.stringify(f));
-      } catch {
-        /* ignore */
-      }
+      const netplanYaml = buildNetplanYaml(f);
+      const requestedLanIp = (f.lan.ip || "").trim();
+      const requestedWifiIp = (f.wifi.ip || "").trim();
+      netFormDirty = true;
+      setNetworkFormValues(f.lan, f.wifi);
       setNetworkApplyButtonState("working");
       try {
         await postSettingsMerge({ networkDraft: f, netplanYaml });
@@ -2060,13 +2154,24 @@
       }
       try {
         const applyResult = await postApplyNetworkHost();
+        networkApplyStatus.textContent = "Netplan applied — checking that the address took effect…";
+        const verified = await verifyNetworkApply(requestedLanIp, requestedWifiIp);
+        if (!verified.ok) {
+          setNetworkApplyButtonState("error");
+          networkApplyStatus.textContent = verified.reason;
+          netFormDirty = true;
+          return;
+        }
         setNetworkApplyButtonState("done");
+        netFormDirty = false;
+        netFormSeeded = false;
+        syncNetFormFromMetrics();
+        const via = applyResult.applyMethod ? ` (${applyResult.applyMethod})` : "";
         if (applyResult.rebootScheduled === true) {
           networkApplyStatus.textContent =
             "Netplan applied. This Pi will reboot shortly — the page will stop responding until it is back.";
         } else {
-          networkApplyStatus.textContent =
-            "Network saved and applied on this Pi. The HMI stays up — refresh if readings pause briefly.";
+          networkApplyStatus.textContent = "Network applied on this Pi" + via + " — live readings match your settings.";
         }
       } catch (e) {
         setNetworkApplyButtonState("error");
@@ -2168,7 +2273,7 @@
         } else {
           msg.removeAttribute("hidden");
           msg.textContent =
-            "Live host readings are offline (status is not Live). Network fields and Apply network are disabled so we do not push netplan without a current interface and link state. Restore the stats service on the Pi, then try again. Copy steps still uses the last saved settings file on the Pi.";
+            "Live host readings are offline (status is not Live). You can still edit fields, but Apply network stays disabled until the stats service is back — we need a current interface and link state before pushing netplan. Copy steps still uses the last saved settings file on the Pi.";
         }
       }
       if (applyBtn) {
@@ -2181,10 +2286,6 @@
           applyBtn.disabled = true;
         }
       }
-      NETWORK_FIELD_IDS.forEach((id) => {
-        const el = document.getElementById(id);
-        if (el) el.disabled = !ok;
-      });
       if (card) card.classList.toggle("network-gated", !ok);
     }
 
@@ -2298,7 +2399,8 @@
       const matches = rows.filter((row) => classifyNetworkIface(row.name) === kind);
       // Prefer whichever interface the backend selected as the primary IP for this kind.
       // This ensures the frontend and backend agree on which iface is "the" LAN/wifi iface.
-      const preferredIp = kind === "lan" ? (net && net.lan_ipv4) : kind === "wifi" ? (net && net.wifi_ipv4) : null;
+      const preferredIp =
+        kind === "lan" ? resolvedLanIpv4(net) : kind === "wifi" ? (net && net.wifi_ipv4) : null;
       if (preferredIp) {
         const hit = matches.find((row) => row.ipv4 === preferredIp);
         if (hit) return hit;
@@ -2366,13 +2468,68 @@
       };
     }
 
+    function lanStaticConfig(net) {
+      const cfg = net && net.lan_static_config;
+      return cfg && typeof cfg === "object" ? cfg : null;
+    }
+
+    function routeGatewayForIface(net, ifaceName) {
+      if (!ifaceName) return "";
+      const routes = Array.isArray(net && net.default_routes) ? net.default_routes : [];
+      const hit = routes.find((r) => r && r.iface === ifaceName && r.gateway);
+      return hit && hit.gateway ? String(hit.gateway) : "";
+    }
+
+    function resolvedLanIpv4(net) {
+      if (net && net.lan_ipv4) return net.lan_ipv4;
+      const rows = Array.isArray(net && net.interfaces) ? net.interfaces : [];
+      const matches = rows.filter((row) => classifyNetworkIface(row.name) === "lan");
+      matches.sort((a, b) => {
+        const sa = ifaceLinkScore(a);
+        const sb = ifaceLinkScore(b);
+        if (sa !== sb) return sa - sb;
+        return String(a.name || "").localeCompare(String(b.name || ""));
+      });
+      for (const row of matches) {
+        if (row.ipv4) return row.ipv4;
+      }
+      const cfg = lanStaticConfig(net);
+      return (cfg && cfg.ip) || "";
+    }
+
+    function resolvedLanGateway(net, lanIface) {
+      const fromRoute = routeGatewayForIface(net, lanIface);
+      if (fromRoute) return fromRoute;
+      const cfg = lanStaticConfig(net);
+      if (cfg && cfg.gateway) return cfg.gateway;
+      const dr = net && net.default_route ? net.default_route : {};
+      if (dr.iface === lanIface && dr.gateway) return dr.gateway;
+      return "";
+    }
+
+    function resolvedWifiGateway(net, wifiIface) {
+      const fromRoute = routeGatewayForIface(net, wifiIface);
+      if (fromRoute) return fromRoute;
+      const dr = net && net.default_route ? net.default_route : {};
+      if (dr.iface === wifiIface && dr.gateway) return dr.gateway;
+      return "";
+    }
+
+    function stripDraftIps(obj) {
+      const d = normalizeNetworkDraft(obj);
+      return {
+        lan: { ...d.lan, ip: "", gateway: "" },
+        wifi: { ...d.wifi, ip: "", gateway: "" },
+      };
+    }
+
     function mergeNetworkDraft(cur, incoming) {
       const a = normalizeNetworkDraft(cur);
       const b = normalizeNetworkDraft(incoming);
-      return {
+      return stripDraftIps({
         lan: { ...a.lan, ...b.lan },
         wifi: { ...a.wifi, ...b.wifi },
-      };
+      });
     }
 
     function loadNetDraft() {
@@ -2390,7 +2547,7 @@
 
     function persistNetDraftLocal(obj) {
       try {
-        localStorage.setItem(LS_NET, JSON.stringify(obj));
+        localStorage.setItem(LS_NET, JSON.stringify(stripDraftIps(obj)));
       } catch {
         /* ignore */
       }
@@ -2461,26 +2618,25 @@
     function seedNetworkFormFromDraftAndMetrics() {
       const d = loadNetDraft();
       const net = lastMetrics && lastMetrics.network ? lastMetrics.network : {};
-      const dr = net.default_route || {};
+      const lanCfg = lanStaticConfig(net);
       const lanRow = findNetworkIfaceRow(net, "lan");
       const wifiRow = findNetworkIfaceRow(net, "wifi");
       const lan = {
-        iface: d.lan.iface || (lanRow && lanRow.name) || guessLanIfaceName(net),
-        ip: net.lan_ipv4 || d.lan.ip || "",
-        netmask: d.lan.netmask || "255.255.255.0",
-        gateway: d.lan.gateway || dr.gateway || "",
+        iface: d.lan.iface || (lanCfg && lanCfg.iface) || (lanRow && lanRow.name) || guessLanIfaceName(net),
+        ip: resolvedLanIpv4(net) || "",
+        netmask: d.lan.netmask || (lanCfg && lanCfg.prefix != null ? prefixToNetmask(lanCfg.prefix) : "255.255.255.0"),
+        gateway: resolvedLanGateway(net, d.lan.iface || (lanRow && lanRow.name) || guessLanIfaceName(net)) || "",
       };
+      const wifiIface = d.wifi.iface || (wifiRow && wifiRow.name) || guessWifiIfaceName(net);
       const wifi = {
-        iface: d.wifi.iface || (wifiRow && wifiRow.name) || guessWifiIfaceName(net),
-        ip: net.wifi_ipv4 || d.wifi.ip || "",
+        iface: wifiIface,
+        ip: net.wifi_ipv4 || "",
         netmask: d.wifi.netmask || "255.255.255.0",
-        gateway: d.wifi.gateway || dr.gateway || "",
+        gateway: resolvedWifiGateway(net, wifiIface) || "",
         ssid: d.wifi.ssid || (net && net.wifi_ssid) || "",
         psk: d.wifi.psk || "",
       };
       setNetworkFormValues(lan, wifi);
-      // Never save live IPs to draft — they come from stats on every load.
-      // Persisting them creates a stale-value cycle if stats later reports wrong data.
       persistNetDraftLocal({ lan: { ...lan, ip: "" }, wifi: { ...wifi, ip: "" } });
       const pskEl = document.getElementById("nf-wifi-psk");
       if (pskEl && !wifi.psk && net && net.wifi_has_password) {
@@ -2513,7 +2669,7 @@
       const wifiStatus = document.getElementById("nf-wifi-status");
       if (lanStatus) {
         lanStatus.innerHTML = lastMetrics
-          ? formatSettingsIfaceStatus(lanRow, net.lan_ipv4, draft.lan.iface || "eth0")
+          ? formatSettingsIfaceStatus(lanRow, resolvedLanIpv4(net), draft.lan.iface || "eth0")
           : "Live readings not available yet.";
       }
       if (wifiStatus) {
@@ -2528,29 +2684,52 @@
       persistNetDraftLocal(f);
     }
 
+    function syncLiveNetworkFieldsFromMetrics(net) {
+      const lanRow = findNetworkIfaceRow(net, "lan");
+      const lanIface = (lanRow && lanRow.name) || guessLanIfaceName(net);
+      const liveLanIp = resolvedLanIpv4(net);
+      const liveLanGw = resolvedLanGateway(net, lanIface);
+      const lanIpEl = document.getElementById("nf-lan-ip");
+      const lanGwEl = document.getElementById("nf-lan-gw");
+      if (lanIpEl && liveLanIp) lanIpEl.value = liveLanIp;
+      if (lanGwEl && liveLanGw) lanGwEl.value = liveLanGw;
+
+      const wifiRow = findNetworkIfaceRow(net, "wifi");
+      const wifiIface = (wifiRow && wifiRow.name) || guessWifiIfaceName(net);
+      const wifiIpEl = document.getElementById("nf-wifi-ip");
+      const wifiGwEl = document.getElementById("nf-wifi-gw");
+      if (wifiIpEl && net.wifi_ipv4) wifiIpEl.value = net.wifi_ipv4;
+      const liveWifiGw = resolvedWifiGateway(net, wifiIface);
+      if (wifiGwEl && liveWifiGw) wifiGwEl.value = liveWifiGw;
+    }
+
     function syncNetFormFromMetrics() {
       const net = lastMetrics && lastMetrics.network ? lastMetrics.network : {};
       updateNetworkStatusLabels(net);
-      if (!netFormSeeded) {
-        if (lastMetrics) seedNetworkFormFromDraftAndMetrics();
-        else {
-          const d = loadNetDraft();
-          setNetworkFormValues(d.lan, d.wifi);
-        }
+      if (!netFormSeeded && lastMetrics) {
+        seedNetworkFormFromDraftAndMetrics();
         netFormSeeded = true;
+        netFormDirty = false;
+      } else if (netFormSeeded && lastMetrics && !netFormDirty) {
+        syncLiveNetworkFieldsFromMetrics(net);
       }
     }
 
     NETWORK_FIELD_IDS.forEach((id) => {
       const el = document.getElementById(id);
-      if (el) el.addEventListener("input", updateNetGenerated);
+      if (el) {
+        el.addEventListener("input", () => {
+          netFormDirty = true;
+          updateNetGenerated();
+        });
+      }
     });
 
     function networkStatusValue(net) {
       const lanRow = findNetworkIfaceRow(net, "lan");
       const wifiRow = findNetworkIfaceRow(net, "wifi");
       const parts = [
-        formatNetworkStatusLine("Ethernet", lanRow, net.lan_ipv4),
+        formatNetworkStatusLine("Ethernet", lanRow, resolvedLanIpv4(net)),
         formatNetworkStatusLine("Wi-Fi", wifiRow, net.wifi_ipv4),
       ];
       return parts.join(" · ");
@@ -2762,6 +2941,7 @@
       if (name === "settings") {
         syncNetFormFromMetrics();
         refreshNetworkGate();
+        void loadHotspotStatus();
         if (lastBgState && lastBgState.dataUrl) {
           pendingBgDataUrl = lastBgState.dataUrl;
           bgPreviewImg.src = lastBgState.dataUrl;
@@ -2878,6 +3058,83 @@
     if (fcResetCardsBtn) fcResetCardsBtn.addEventListener("click", resetFcCards);
     if (fcAddCancel) fcAddCancel.addEventListener("click", () => fcAddDialog && fcAddDialog.close());
     if (fcAddSearch) fcAddSearch.addEventListener("input", () => fillFcAddList(fcAddSearch.value));
+
+    // ── Hotspot panel ───────────────────────────────────────────────────────────
+    const hsStatus      = document.getElementById("hs-status");
+    const hsSsid        = document.getElementById("hs-ssid");
+    const hsPsk         = document.getElementById("hs-psk");
+    const hsIp          = document.getElementById("hs-ip");
+    const hsChannel     = document.getElementById("hs-channel");
+    const hsIface       = document.getElementById("hs-iface");
+    const hsEnableBtn   = document.getElementById("hs-enable");
+    const hsDisableBtn  = document.getElementById("hs-disable");
+    const hsApplyStatus = document.getElementById("hs-apply-status");
+
+    async function loadHotspotStatus() {
+      try {
+        const r = await fetch("/api/hotspot", { cache: "no-store" });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const d = await r.json();
+        if (hsStatus) {
+          if (d.active) {
+            const cli = d.clients === 1 ? "1 client" : `${d.clients} clients`;
+            hsStatus.textContent = `Active — ${d.ip}/24  •  ${cli} connected`;
+            hsStatus.style.color = "var(--green, #4caf50)";
+          } else {
+            hsStatus.textContent = "Inactive";
+            hsStatus.style.color = "";
+          }
+        }
+        if (!hsSsid.value)    hsSsid.value    = d.ssid    || "DroneNet";
+        if (!hsIp.value)      hsIp.value      = d.ip      || "10.0.69.1";
+        if (!hsChannel.value) hsChannel.value = String(d.channel || 6);
+        if (!hsIface.value)   hsIface.value   = d.iface   || "wlan1";
+      } catch {
+        if (hsStatus) hsStatus.textContent = "Status unavailable";
+      }
+    }
+
+    async function applyHotspot(enabled) {
+      if (hsApplyStatus) hsApplyStatus.textContent = enabled ? "Enabling…" : "Disabling…";
+      try {
+        const body = enabled
+          ? {
+              enabled: true,
+              ssid:    (hsSsid.value    || "").trim(),
+              psk:     (hsPsk.value     || "").trim(),
+              ip:      (hsIp.value      || "").trim(),
+              channel: parseInt(hsChannel.value || "6", 10),
+              iface:   (hsIface.value   || "wlan1").trim(),
+            }
+          : { enabled: false };
+
+        if (enabled) {
+          if (!body.ssid)            { hsApplyStatus.textContent = "SSID is required."; return; }
+          if (body.psk.length < 8)   { hsApplyStatus.textContent = "Password must be at least 8 characters."; return; }
+          if (!body.ip)              { hsApplyStatus.textContent = "Gateway IP is required."; return; }
+        }
+
+        const r = await fetch("/api/hotspot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await r.json();
+        if (!r.ok || !data.ok) throw new Error(data.error || `HTTP ${r.status}`);
+
+        if (hsApplyStatus) hsApplyStatus.textContent = enabled ? "Hotspot enabled." : "Hotspot disabled.";
+        await loadHotspotStatus();
+      } catch (e) {
+        if (hsApplyStatus) hsApplyStatus.textContent = "Error: " + (e.message || "unknown");
+      }
+    }
+
+    if (hsEnableBtn)  hsEnableBtn.addEventListener("click",  () => applyHotspot(true));
+    if (hsDisableBtn) hsDisableBtn.addEventListener("click",  () => applyHotspot(false));
+
+    void loadHotspotStatus();
+    setInterval(loadHotspotStatus, 10000);
+    // ────────────────────────────────────────────────────────────────────────────
 
     initHostMeta()
       .then(() => hydrateFromServer())

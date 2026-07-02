@@ -16,6 +16,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <regex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -36,6 +37,15 @@ std::string getenv_or(const char* key, const std::string& fallback) {
 void trim_inplace(std::string& s) {
   while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.erase(s.begin());
   while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.pop_back();
+}
+
+void strip_network_draft_ips(json& draft) {
+  if (!draft.is_object()) return;
+  for (const char* section : {"lan", "wifi"}) {
+    if (!draft.contains(section) || !draft[section].is_object()) continue;
+    draft[section].erase("ip");
+    draft[section].erase("gateway");
+  }
 }
 
 std::string to_lower(std::string s) {
@@ -129,8 +139,170 @@ CmdResult run_command_argv(const std::vector<std::string>& args) {
   return r;
 }
 
+CmdResult run_on_host_shell(const std::string& script) {
+  return run_command_argv({"nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p", "sh", "-c", script});
+}
+
+std::string shell_quote(const std::string& s) {
+  std::string out = "'";
+  for (char c : s) {
+    if (c == '\'') out += "'\\''";
+    else out += c;
+  }
+  out += "'";
+  return out;
+}
+
+struct EthApplySpec {
+  std::string iface;
+  std::string address_cidr;
+  std::string gateway;
+  bool never_default = true;
+};
+
+int yaml_line_indent_local(const std::string& line) {
+  int indent = 0;
+  for (char c : line) {
+    if (c == ' ') indent++;
+    else break;
+  }
+  return indent;
+}
+
+std::optional<EthApplySpec> parse_eth_from_netplan_yaml(const std::string& text) {
+  std::istringstream iss(text);
+  std::string line;
+  bool in_ethernets = false;
+  int eth_indent = -1;
+  std::string cur_iface;
+  bool iface_dhcp4 = false;
+  EthApplySpec building;
+  bool in_addresses = false;
+  int addresses_indent = -1;
+  std::optional<EthApplySpec> result;
+
+  auto commit_iface = [&]() {
+    if (!cur_iface.empty() && !iface_dhcp4 && !building.address_cidr.empty()) {
+      building.iface = cur_iface;
+      result = building;
+    }
+    cur_iface.clear();
+    iface_dhcp4 = false;
+    building = EthApplySpec{};
+    in_addresses = false;
+    addresses_indent = -1;
+  };
+
+  std::regex cidr_re(R"(^\-\s*((?:\d{1,3}\.){3}\d{1,3})/(\d{1,2})\s*$)");
+  std::regex via_re(R"(^\s*via:\s*((?:\d{1,3}\.){3}\d{1,3})\s*$)", std::regex_constants::icase);
+
+  while (std::getline(iss, line)) {
+    if (!line.empty() && line.back() == '\r') line.pop_back();
+    const int indent = yaml_line_indent_local(line);
+    std::string trimmed = line.substr(static_cast<size_t>(indent));
+    if (trimmed.empty() || trimmed.front() == '#') continue;
+    std::string tl = trimmed;
+    for (auto& c : tl) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+    if (tl == "ethernets:") {
+      commit_iface();
+      in_ethernets = true;
+      eth_indent = indent;
+      continue;
+    }
+    if (!in_ethernets) continue;
+    if (indent <= eth_indent) {
+      commit_iface();
+      in_ethernets = false;
+      continue;
+    }
+
+    if (cur_iface.empty() && indent == eth_indent + 2) {
+      const auto colon = trimmed.find(':');
+      if (colon != std::string::npos && colon + 1 == trimmed.size()) {
+        cur_iface = trimmed.substr(0, colon);
+        continue;
+      }
+    }
+    if (cur_iface.empty()) continue;
+
+    if (indent <= eth_indent + 2) {
+      commit_iface();
+      if (indent == eth_indent + 2) {
+        const auto colon = trimmed.find(':');
+        if (colon != std::string::npos && colon + 1 == trimmed.size()) cur_iface = trimmed.substr(0, colon);
+      }
+      continue;
+    }
+
+    if (tl.rfind("dhcp4:", 0) == 0) {
+      std::string v = trimmed.substr(trimmed.find(':') + 1);
+      trim_inplace(v);
+      for (auto& c : v) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      iface_dhcp4 = (v == "true" || v == "yes" || v == "1");
+      continue;
+    }
+    if (tl == "addresses:") {
+      in_addresses = true;
+      addresses_indent = indent;
+      continue;
+    }
+    if (in_addresses && indent > addresses_indent) {
+      std::smatch m;
+      if (std::regex_match(trimmed, m, cidr_re)) {
+        building.address_cidr = m[1].str() + "/" + m[2].str();
+      }
+      continue;
+    }
+    std::smatch m;
+    if (std::regex_match(trimmed, m, via_re)) {
+      building.gateway = m[1].str();
+      building.never_default = false;
+    }
+  }
+  commit_iface();
+  return result;
+}
+
+bool host_netplan_uses_networkmanager() {
+  const std::filesystem::path dir("/etc/netplan");
+  std::error_code ec;
+  if (!std::filesystem::is_directory(dir, ec)) return false;
+  bool saw_nm = false;
+  for (const auto& e : std::filesystem::directory_iterator(dir, ec)) {
+    if (ec || !e.is_regular_file()) continue;
+    const std::string name = e.path().filename().string();
+    if (name.rfind("90-NM-", 0) == 0) saw_nm = true;
+  }
+  return saw_nm;
+}
+
+std::string nmcli_apply_eth_script(const EthApplySpec& spec) {
+  std::ostringstream ss;
+  ss << "set -e\n"
+     << "command -v nmcli >/dev/null 2>&1 || { echo 'nmcli not found on host' >&2; exit 43; }\n"
+     << "IF=" << shell_quote(spec.iface) << "\n"
+     << "ADDR=" << shell_quote(spec.address_cidr) << "\n"
+     << "UUID=$(nmcli -g GENERAL.CON-UUID device show \"$IF\" 2>/dev/null | head -n1)\n"
+     << "if [ -z \"$UUID\" ] || [ \"$UUID\" = \"--\" ]; then\n"
+     << "  UUID=$(nmcli -t -f UUID,DEVICE connection show 2>/dev/null | "
+        "awk -F: -v d=\"$IF\" '$2==d{print $1; exit}')\n"
+     << "fi\n"
+     << "if [ -z \"$UUID\" ]; then echo \"no NetworkManager profile for $IF\" >&2; exit 42; fi\n"
+     << "nmcli connection modify \"$UUID\" ipv6.method ignore ipv4.method manual "
+        "ipv4.addresses \"$ADDR\"";
+  if (spec.never_default || spec.gateway.empty()) {
+    ss << " ipv4.gateway '' ipv4.never-default yes";
+  } else {
+    ss << " ipv4.gateway " << shell_quote(spec.gateway) << " ipv4.never-default no";
+  }
+  ss << "\nnmcli connection up \"$UUID\" 2>/dev/null || nmcli device reapply \"$IF\"\n";
+  return ss.str();
+}
+
 void apply_netplan_on_host(const std::string& yaml_text, const std::filesystem::path& host_file,
-                           const std::string& netplan_cmd) {
+                           const std::string& netplan_cmd, std::string& apply_method_out) {
+  apply_method_out.clear();
   std::error_code ec;
   std::filesystem::create_directories(host_file.parent_path(), ec);
   auto tmp = host_file;
@@ -144,13 +316,46 @@ void apply_netplan_on_host(const std::string& yaml_text, const std::filesystem::
   std::filesystem::rename(tmp, host_file, ec);
   if (ec) throw std::runtime_error(ec.message());
 
-  std::vector<std::string> args = {"nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p", netplan_cmd, "apply"};
-  auto rr = run_command_argv(args);
-  if (rr.exit_code != 0) {
-    std::string err = rr.combined_output;
-    trim_inplace(err);
-    if (err.empty()) err = "netplan exit " + std::to_string(rr.exit_code);
-    throw std::runtime_error(err);
+  const bool nm_managed = host_netplan_uses_networkmanager();
+  const auto eth = parse_eth_from_netplan_yaml(yaml_text);
+
+  if (eth && nm_managed) {
+    auto rr = run_on_host_shell(nmcli_apply_eth_script(*eth));
+    if (rr.exit_code != 0) {
+      std::string err = rr.combined_output;
+      trim_inplace(err);
+      if (err.empty()) err = "nmcli exit " + std::to_string(rr.exit_code);
+      throw std::runtime_error(err);
+    }
+    apply_method_out = "nmcli";
+  }
+
+  const bool force_netplan = !env_flag_off("HMI_NETPLAN_APPLY", nm_managed ? "0" : "1");
+  if (force_netplan) {
+    std::vector<std::string> args = {"nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p", netplan_cmd, "apply"};
+    auto rr = run_command_argv(args);
+    if (rr.exit_code != 0) {
+      std::string err = rr.combined_output;
+      trim_inplace(err);
+      if (err.empty()) err = "netplan exit " + std::to_string(rr.exit_code);
+      if (apply_method_out == "nmcli") {
+        apply_method_out += "+netplan_warn";
+      } else {
+        throw std::runtime_error(err);
+      }
+    } else if (apply_method_out.empty()) {
+      apply_method_out = "netplan";
+    } else {
+      apply_method_out += "+netplan";
+    }
+  } else if (apply_method_out.empty()) {
+    if (!eth) throw std::runtime_error("No Ethernet section in saved netplan text.");
+    throw std::runtime_error("NetworkManager netplan detected but no Ethernet block to apply.");
+  }
+
+  if (!env_flag_off("HMI_RESTART_NETWORK_MANAGER", "1")) {
+    run_on_host_shell("systemctl restart NetworkManager 2>/dev/null || "
+                      "service NetworkManager restart 2>/dev/null || true");
   }
 }
 
@@ -280,6 +485,72 @@ bool fetch_telemetry_upstream(const ParsedUrl& base, const std::string& path_que
   return fetch_video_upstream_path(base, path_query, timeout_sec, status, body, content_type);
 }
 
+bool valid_hotspot_ssid(const std::string& s) {
+  if (s.empty() || s.size() > 32) return false;
+  for (unsigned char c : s) {
+    if (c < 32 || c > 126) return false;
+  }
+  return true;
+}
+
+bool valid_hotspot_psk(const std::string& s) {
+  return s.size() >= 8 && s.size() <= 63;
+}
+
+bool valid_ipv4(const std::string& s) {
+  static const std::regex re(R"(^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$)");
+  std::smatch m;
+  if (!std::regex_match(s, m, re)) return false;
+  for (int i = 1; i <= 4; ++i) {
+    try { if (std::stoi(m[i].str()) > 255) return false; } catch (...) { return false; }
+  }
+  return true;
+}
+
+bool valid_hotspot_channel(int ch) {
+  if (ch >= 1 && ch <= 14) return true;
+  static const int ch5[] = {36,40,44,48,52,56,60,64,100,104,108,112,116,120,124,128,132,136,140,149,153,157,161,165};
+  for (int c : ch5) if (c == ch) return true;
+  return false;
+}
+
+bool valid_wlan_iface(const std::string& s) {
+  if (s.size() < 3 || s.size() > 16) return false;
+  if (s.rfind("wlan", 0) != 0) return false;
+  for (unsigned char c : s) {
+    if (!std::isalnum(c) && c != '_') return false;
+  }
+  return true;
+}
+
+std::string hotspot_apply_script(const std::string& iface, const std::string& ssid,
+                                  const std::string& psk, const std::string& ip, int channel) {
+  std::ostringstream ss;
+  ss << "set -e\n"
+     << "command -v nmcli >/dev/null 2>&1 || { echo 'nmcli not found' >&2; exit 43; }\n"
+     << "CON=DroneHotspot\n"
+     << "IF=" << shell_quote(iface) << "\n"
+     << "if nmcli connection show \"$CON\" >/dev/null 2>&1; then\n"
+     << "  nmcli connection modify \"$CON\""
+     << " 802-11-wireless.ssid " << shell_quote(ssid)
+     << " wifi-sec.psk " << shell_quote(psk)
+     << " ipv4.addresses " << shell_quote(ip + "/24")
+     << " 802-11-wireless.channel " << channel << "\n"
+     << "else\n"
+     << "  nmcli connection add type wifi ifname \"$IF\" con-name \"$CON\" autoconnect yes"
+     << " ssid " << shell_quote(ssid)
+     << " wifi-sec.key-mgmt wpa-psk"
+     << " wifi-sec.psk " << shell_quote(psk)
+     << " 802-11-wireless.mode ap"
+     << " 802-11-wireless.band bg"
+     << " 802-11-wireless.channel " << channel
+     << " ipv4.method shared"
+     << " ipv4.addresses " << shell_quote(ip + "/24") << "\n"
+     << "fi\n"
+     << "nmcli connection up \"$CON\"\n";
+  return ss.str();
+}
+
 bool valid_serial_device(const std::string& s) {
   if (s.rfind("/dev/", 0) != 0 || s.size() < 6 || s.size() > 128) return false;
   for (unsigned char c : s) {
@@ -397,7 +668,9 @@ int main() {
       res.set_content("{}", "application/json");
       return;
     }
-    res.set_content(cur.dump(), "application/json; charset=utf-8");
+    json response = cur;
+    if (response.contains("networkDraft")) strip_network_draft_ips(response["networkDraft"]);
+    res.set_content(response.dump(), "application/json; charset=utf-8");
   });
 
   svr.Post("/api/hmi-settings", [](const httplib::Request& req, httplib::Response& res) {
@@ -429,6 +702,8 @@ int main() {
       cur["fcSerialDevice"] = incoming["fcSerialDevice"];
     if (incoming.contains("fcSerialBaud") && incoming["fcSerialBaud"].is_number_integer())
       cur["fcSerialBaud"] = incoming["fcSerialBaud"];
+    if (incoming.contains("hotspotConfig") && incoming["hotspotConfig"].is_object())
+      cur["hotspotConfig"] = incoming["hotspotConfig"];
     if (incoming.contains("fcCardLayout") && incoming["fcCardLayout"].is_array()) {
       json layout = json::array();
       for (const auto& item : incoming["fcCardLayout"]) {
@@ -469,12 +744,13 @@ int main() {
       res.set_content(j.dump(), "application/json; charset=utf-8");
       return;
     }
+    std::string apply_method;
     try {
       std::filesystem::path host_netplan(getenv_or("HMI_HOST_NETPLAN_FILE", "/etc/netplan/99-drone-hmi.yaml"));
       std::string netplan_cmd = getenv_or("HMI_NETPLAN_CMD", "/usr/sbin/netplan");
       trim_inplace(netplan_cmd);
       if (netplan_cmd.empty()) netplan_cmd = "/usr/sbin/netplan";
-      apply_netplan_on_host(yaml_text, host_netplan, netplan_cmd);
+      apply_netplan_on_host(yaml_text, host_netplan, netplan_cmd, apply_method);
     } catch (const std::exception& e) {
       json j = {{"ok", false}, {"error", e.what()}};
       res.status = 500;
@@ -489,8 +765,110 @@ int main() {
         reboot_scheduled = true;
       }
     }
-    json j = {{"ok", true}, {"rebootScheduled", reboot_scheduled}};
+    json j = {{"ok", true}, {"rebootScheduled", reboot_scheduled}, {"applyMethod", apply_method}};
     res.set_content(j.dump(), "application/json; charset=utf-8");
+  });
+
+  svr.Get("/api/hotspot", [](const httplib::Request&, httplib::Response& res) {
+    json cur;
+    read_settings(cur);
+    const json& cfg = cur.contains("hotspotConfig") ? cur["hotspotConfig"] : json::object();
+
+    auto sr = run_on_host_shell(
+        "nmcli -t -f DEVICE,STATE,CONNECTION device status 2>/dev/null | "
+        "awk -F: '$1==\"wlan1\"{print $2\"|\"$3}'");
+    bool active = sr.exit_code == 0 &&
+                  sr.combined_output.find("connected|DroneHotspot") != std::string::npos;
+
+    int clients = 0;
+    if (active) {
+      auto cr = run_on_host_shell(
+          "iw dev wlan1 station dump 2>/dev/null | grep -c '^Station' || echo 0");
+      if (cr.exit_code == 0) {
+        try { clients = std::stoi(cr.combined_output); } catch (...) {}
+      }
+    }
+
+    json j = {
+        {"active", active},
+        {"clients", clients},
+        {"ssid", cfg.value("ssid", "DroneNet")},
+        {"ip", cfg.value("ip", "10.0.69.1")},
+        {"iface", cfg.value("iface", "wlan1")},
+        {"channel", cfg.value("channel", 6)},
+    };
+    res.set_content(j.dump(), "application/json; charset=utf-8");
+    res.set_header("Cache-Control", "no-store");
+  });
+
+  svr.Post("/api/hotspot", [](const httplib::Request& req, httplib::Response& res) {
+    json incoming;
+    try {
+      incoming = json::parse(req.body);
+    } catch (...) {
+      res.status = 400;
+      res.set_content(R"({"ok":false,"error":"invalid JSON"})", "application/json; charset=utf-8");
+      return;
+    }
+
+    const bool enable = incoming.value("enabled", true);
+    if (!enable) {
+      run_on_host_shell("nmcli connection down DroneHotspot 2>/dev/null || true");
+      json cur; read_settings(cur);
+      if (cur.contains("hotspotConfig")) cur["hotspotConfig"]["enabled"] = false;
+      write_settings_atomic(cur);
+      res.set_content(R"({"ok":true,"active":false})", "application/json; charset=utf-8");
+      return;
+    }
+
+    const std::string ssid  = incoming.value("ssid", "");
+    const std::string psk   = incoming.value("psk", "");
+    const std::string ip    = incoming.value("ip", "");
+    const std::string iface = incoming.value("iface", "wlan1");
+    const int channel       = incoming.value("channel", 6);
+
+    if (!valid_hotspot_ssid(ssid)) {
+      res.status = 400;
+      res.set_content(R"x({"ok":false,"error":"invalid SSID (1-32 printable characters)"})x", "application/json; charset=utf-8");
+      return;
+    }
+    if (!valid_hotspot_psk(psk)) {
+      res.status = 400;
+      res.set_content(R"({"ok":false,"error":"password must be 8-63 characters"})", "application/json; charset=utf-8");
+      return;
+    }
+    if (!valid_ipv4(ip)) {
+      res.status = 400;
+      res.set_content(R"({"ok":false,"error":"invalid gateway IP address"})", "application/json; charset=utf-8");
+      return;
+    }
+    if (!valid_wlan_iface(iface)) {
+      res.status = 400;
+      res.set_content(R"({"ok":false,"error":"invalid interface name"})", "application/json; charset=utf-8");
+      return;
+    }
+    if (!valid_hotspot_channel(channel)) {
+      res.status = 400;
+      res.set_content(R"x({"ok":false,"error":"invalid channel (use 1-14 for 2.4 GHz)"})x", "application/json; charset=utf-8");
+      return;
+    }
+
+    auto r = run_on_host_shell(hotspot_apply_script(iface, ssid, psk, ip, channel));
+    if (r.exit_code != 0) {
+      std::string err = r.combined_output;
+      trim_inplace(err);
+      json j = {{"ok", false}, {"error", err.empty() ? "nmcli failed" : err}};
+      res.status = 500;
+      res.set_content(j.dump(), "application/json; charset=utf-8");
+      return;
+    }
+
+    json cur; read_settings(cur);
+    cur["hotspotConfig"] = {{"ssid", ssid}, {"psk", psk}, {"ip", ip},
+                             {"iface", iface}, {"channel", channel}, {"enabled", true}};
+    write_settings_atomic(cur);
+
+    res.set_content(R"({"ok":true,"active":true})", "application/json; charset=utf-8");
   });
 
   svr.Get("/api/stats", [&](const httplib::Request&, httplib::Response& res) {

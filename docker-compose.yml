@@ -134,6 +134,9 @@ services:
       TELEMETRY_SERVICE_URL: http://telemetry:9102
       # Network apply runs netplan on the host; do not reboot — keeps HMI reachable over Wi-Fi.
       HMI_REBOOT_AFTER_NETPLAN: "0"
+      HMI_RESTART_NETWORK_MANAGER: "1"
+      # Pi OS uses 90-NM-*.yaml; nmcli applies eth changes. Set to 1 to also run netplan apply.
+      HMI_NETPLAN_APPLY: "0"
     depends_on:
       stats:
         condition: service_healthy

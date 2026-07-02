@@ -665,6 +665,152 @@ struct WifiNetplanInfo {
   bool has_password = false;
 };
 
+struct LanNetplanInfo {
+  std::string iface;
+  std::string ip;
+  int prefix = 24;
+  std::optional<std::string> gateway;
+};
+
+int yaml_line_indent(const std::string& line) {
+  int indent = 0;
+  for (char c : line) {
+    if (c == ' ') indent++;
+    else break;
+  }
+  return indent;
+}
+
+std::optional<LanNetplanInfo> parse_lan_from_netplan_file(const std::string& text) {
+  std::istringstream iss(text);
+  std::string line;
+  bool in_ethernets = false;
+  int eth_indent = -1;
+  std::string cur_iface;
+  bool iface_dhcp4 = false;
+  LanNetplanInfo building;
+  bool in_addresses = false;
+  bool in_routes = false;
+  int addresses_indent = -1;
+  int routes_indent = -1;
+  std::optional<LanNetplanInfo> result;
+
+  auto commit_iface = [&]() {
+    if (!cur_iface.empty() && !iface_dhcp4 && !building.ip.empty()) {
+      building.iface = cur_iface;
+      result = building;
+    }
+    cur_iface.clear();
+    iface_dhcp4 = false;
+    building = LanNetplanInfo{};
+    in_addresses = false;
+    in_routes = false;
+    addresses_indent = -1;
+    routes_indent = -1;
+  };
+
+  std::regex cidr_re(R"(^\-\s*((?:\d{1,3}\.){3}\d{1,3})(?:/(\d{1,2}))?\s*$)");
+  std::regex via_re(R"(^\s*via:\s*((?:\d{1,3}\.){3}\d{1,3})\s*$)", std::regex_constants::icase);
+  std::regex gw4_re(R"(^gateway4:\s*((?:\d{1,3}\.){3}\d{1,3})\s*$)", std::regex_constants::icase);
+
+  while (std::getline(iss, line)) {
+    if (!line.empty() && line.back() == '\r') line.pop_back();
+    const int indent = yaml_line_indent(line);
+    std::string trimmed = line.substr(static_cast<size_t>(indent));
+    if (trimmed.empty() || trimmed.front() == '#') continue;
+    std::string tl = trimmed;
+    for (auto& c : tl) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+    if (tl == "ethernets:") {
+      commit_iface();
+      in_ethernets = true;
+      eth_indent = indent;
+      continue;
+    }
+    if (!in_ethernets) continue;
+    if (indent <= eth_indent) {
+      commit_iface();
+      in_ethernets = false;
+      continue;
+    }
+
+    if (cur_iface.empty() && indent == eth_indent + 2) {
+      const auto colon = trimmed.find(':');
+      if (colon != std::string::npos && colon + 1 == trimmed.size()) {
+        cur_iface = trimmed.substr(0, colon);
+        continue;
+      }
+    }
+    if (cur_iface.empty()) continue;
+
+    if (indent <= eth_indent + 2) {
+      commit_iface();
+      if (indent == eth_indent + 2) {
+        const auto colon = trimmed.find(':');
+        if (colon != std::string::npos && colon + 1 == trimmed.size()) {
+          cur_iface = trimmed.substr(0, colon);
+        }
+      }
+      continue;
+    }
+
+    if (tl.rfind("dhcp4:", 0) == 0) {
+      const auto val = trimmed.substr(trimmed.find(':') + 1);
+      std::string v = val;
+      trim_inplace(v);
+      for (auto& c : v) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      iface_dhcp4 = (v == "true" || v == "yes" || v == "1");
+      continue;
+    }
+    if (tl == "addresses:") {
+      in_addresses = true;
+      in_routes = false;
+      addresses_indent = indent;
+      continue;
+    }
+    if (tl == "routes:") {
+      in_routes = true;
+      in_addresses = false;
+      routes_indent = indent;
+      continue;
+    }
+    if (in_addresses && indent > addresses_indent) {
+      std::smatch m;
+      if (std::regex_match(trimmed, m, cidr_re)) {
+        building.ip = m[1].str();
+        if (m[2].matched) {
+          try {
+            building.prefix = std::stoi(m[2].str());
+          } catch (...) {
+            building.prefix = 24;
+          }
+        }
+      }
+      continue;
+    }
+    if (in_routes && indent > routes_indent) {
+      std::smatch m;
+      if (std::regex_match(trimmed, m, via_re)) building.gateway = m[1].str();
+      continue;
+    }
+    std::smatch m;
+    if (std::regex_match(trimmed, m, gw4_re)) building.gateway = m[1].str();
+  }
+  commit_iface();
+  return result;
+}
+
+std::optional<LanNetplanInfo> parse_lan_from_netplan(const std::string& host_root) {
+  std::optional<LanNetplanInfo> best;
+  for (const auto& path : sorted_netplan_paths(host_root)) {
+    auto text = read_file(path);
+    if (!text) continue;
+    auto found = parse_lan_from_netplan_file(*text);
+    if (found && !found->ip.empty()) best = found;
+  }
+  return best;
+}
+
 std::optional<WifiNetplanInfo> parse_wifi_from_nm(const std::string& host_root) {
   const std::string dir = host_root + "/etc/NetworkManager/system-connections";
   if (!fs::is_directory(dir)) return std::nullopt;
@@ -764,6 +910,7 @@ nlohmann::json network_summary(const std::string& host_proc, const std::string& 
   auto all_defaults = default_routes_from_proc(host_proc);
   auto route = default_ipv4_route(host_proc);
   auto netplan = grep_netplan_hints(host_root);
+  auto lan_netplan = parse_lan_from_netplan(host_root);
   auto wifi_netplan = parse_wifi_from_nm(host_root);
   if (!wifi_netplan) wifi_netplan = parse_wifi_from_netplan(host_root);
   auto dhcpcd_arr = grep_dhcpcd_hints(host_root);
@@ -817,6 +964,14 @@ nlohmann::json network_summary(const std::string& host_proc, const std::string& 
   nlohmann::json dhcpcd_json = nlohmann::json::array();
   for (const auto& s : dhcpcd) dhcpcd_json.push_back(s);
 
+  nlohmann::json lan_static = nullptr;
+  if (lan_netplan) {
+    lan_static = nlohmann::json{{"iface", lan_netplan->iface},
+                                {"ip", lan_netplan->ip},
+                                {"prefix", lan_netplan->prefix},
+                                {"gateway", lan_netplan->gateway ? nlohmann::json(*lan_netplan->gateway) : nlohmann::json(nullptr)}};
+  }
+
   return nlohmann::json{{"interfaces", iface_rows_to_json(ifaces_rows, ipv4_by_iface)},
                         {"default_route", route.empty() ? nullptr : route},
                         {"default_routes", nlohmann::json(sorted_defaults)},
@@ -824,6 +979,7 @@ nlohmann::json network_summary(const std::string& host_proc, const std::string& 
                         {"config_hints", nlohmann::json{{"netplan", netplan}, {"dhcpcd", dhcpcd_json}}},
                         {"primary_ipv4_hint", primary ? nlohmann::json(*primary) : nlohmann::json(nullptr)},
                         {"lan_ipv4", lan_ipv4 ? nlohmann::json(*lan_ipv4) : nlohmann::json(nullptr)},
+                        {"lan_static_config", std::move(lan_static)},
                         {"wifi_ipv4", wifi_ipv4 ? nlohmann::json(*wifi_ipv4) : nlohmann::json(nullptr)},
                         {"wifi_ssid", wifi_netplan ? nlohmann::json(wifi_netplan->ssid) : nlohmann::json(nullptr)},
                         {"wifi_has_password", wifi_netplan ? nlohmann::json(wifi_netplan->has_password) : nlohmann::json(nullptr)}};
