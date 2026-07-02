@@ -819,7 +819,7 @@ std::optional<WifiNetplanInfo> parse_wifi_from_nm(const std::string& host_root) 
     auto text = read_file(e.path().string());
     if (!text) continue;
     std::string ssid, psk;
-    bool in_wifi = false, in_sec = false;
+    bool in_wifi = false, in_sec = false, is_ap = false;
     std::istringstream iss(*text);
     std::string line;
     while (std::getline(iss, line)) {
@@ -838,9 +838,10 @@ std::optional<WifiNetplanInfo> parse_wifi_from_nm(const std::string& host_root) 
       std::string kl = key;
       for (auto& c : kl) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
       if (in_wifi && kl == "ssid") ssid = val;
+      if (in_wifi && kl == "mode" && val == "ap") is_ap = true;
       if (in_sec && (kl == "psk" || kl == "psk-flags")) { if (kl == "psk") psk = val; }
     }
-    if (!ssid.empty()) return WifiNetplanInfo{ssid, !psk.empty()};
+    if (!ssid.empty() && !is_ap) return WifiNetplanInfo{ssid, !psk.empty()};
   }
   return std::nullopt;
 }

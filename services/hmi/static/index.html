@@ -909,16 +909,8 @@
               <input id="nf-wifi-psk" type="password" autocomplete="off" placeholder="Password for static Wi-Fi IP" />
             </div>
           </div>
-          <p class="sub" id="network-apply-status" style="min-height: 1.35em; margin-top: 0.75rem" aria-live="polite"></p>
-          <div class="dlg-actions" style="margin-top: 0.35rem">
-            <button type="button" class="primary" id="network-apply">Apply network</button>
-            <button type="button" id="settings-copy-ssh">Copy steps</button>
-          </div>
-        </article>
-
-        <article class="card settings-card" id="hotspot-card">
-          <h2>Hotspot</h2>
-          <p class="settings-hint">DroneNet — Alfa USB adapter broadcasting a Wi-Fi access point on wlan1.</p>
+          <h3 class="net-section-title">Hotspot</h3>
+          <p class="settings-hint" style="margin-bottom: 0.5rem">DroneNet — Alfa USB adapter (wlan1) broadcasting a Wi-Fi access point.</p>
           <p class="iface-status" id="hs-status">Checking…</p>
           <div class="net-grid two">
             <div class="field" style="grid-column: 1 / -1">
@@ -946,6 +938,12 @@
           <div class="dlg-actions" style="margin-top: 0.35rem">
             <button type="button" class="primary" id="hs-enable">Enable Hotspot</button>
             <button type="button" id="hs-disable">Disable Hotspot</button>
+          </div>
+          <hr class="dlg-hr" style="margin-top: 1rem" />
+          <p class="sub" id="network-apply-status" style="min-height: 1.35em; margin-top: 0.75rem" aria-live="polite"></p>
+          <div class="dlg-actions" style="margin-top: 0.35rem">
+            <button type="button" class="primary" id="network-apply">Apply network</button>
+            <button type="button" id="settings-copy-ssh">Copy steps</button>
           </div>
         </article>
 
@@ -2498,12 +2496,8 @@
     }
 
     function resolvedLanGateway(net, lanIface) {
-      const fromRoute = routeGatewayForIface(net, lanIface);
-      if (fromRoute) return fromRoute;
       const cfg = lanStaticConfig(net);
       if (cfg && cfg.gateway) return cfg.gateway;
-      const dr = net && net.default_route ? net.default_route : {};
-      if (dr.iface === lanIface && dr.gateway) return dr.gateway;
       return "";
     }
 
