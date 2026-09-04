@@ -547,6 +547,7 @@ std::string hotspot_apply_script(const std::string& iface, const std::string& ss
      << " ipv4.method shared"
      << " ipv4.addresses " << shell_quote(ip + "/24") << "\n"
      << "fi\n"
+     << "nmcli connection down \"$CON\" 2>/dev/null || true\n"
      << "nmcli connection up \"$CON\"\n";
   return ss.str();
 }
