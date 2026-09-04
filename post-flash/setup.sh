@@ -155,7 +155,18 @@ if [[ -f "$CMDLINE_TXT" ]]; then
     fi
 fi
 
-# ─── 9. Optional: MIPI camera overlay ────────────────────────────────────────
+# ─── 9. DroneNet hotspot (Alfa USB adapter on wlan1) ────────────────────────
+log "Installing DroneNet hotspot dispatcher script..."
+cat > /etc/NetworkManager/dispatcher.d/99-dronenet-masquerade <<'DISPEOF'
+#!/bin/sh
+[ "$1" = "wlan1" ] && [ "$2" = "up" ] || exit 0
+iptables -t nat -C POSTROUTING -s 10.0.69.0/24 ! -d 10.0.69.0/24 -j MASQUERADE 2>/dev/null || \
+    iptables -t nat -A POSTROUTING -s 10.0.69.0/24 ! -d 10.0.69.0/24 -j MASQUERADE
+DISPEOF
+chmod +x /etc/NetworkManager/dispatcher.d/99-dronenet-masquerade
+ok "DroneNet masquerade dispatcher installed."
+
+# ─── 10. Optional: MIPI camera overlay ───────────────────────────────────────
 echo ""
 echo -e "${YELLOW}Optional: MIPI camera overlay (Arducam UC-873 / Pi Camera)${NC}"
 echo "  1) imx519  — Arducam UC-873"
@@ -189,7 +200,7 @@ else
     warn "Boot config not found — apply camera overlay manually if needed."
 fi
 
-# ─── 10. Summary ─────────────────────────────────────────────────────────────
+# ─── 11. Summary ─────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}════════════════════════════════════════════${NC}"
 echo -e "${GREEN}  Setup complete!${NC}"
